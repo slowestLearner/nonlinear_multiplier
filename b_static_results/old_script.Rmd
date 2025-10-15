@@ -1,0 +1,1609 @@
+Put together quarterly OFI/FIT and return data. 
+
+```{r}
+source('runmefirst.R')
+
+# stock returns
+stock_data = readRDS('../../data/stocks/prices/quarterly_return.RDS')
+stock_data = stock_data[, list(yyyymm, permno, ret)]
+
+# FIT - pick a version
+data = readRDS('../../data/demand_shocks/j_fit/quarterly_updated_20250313.RDS')[, list(yyyymm, permno, type = 'FIT', ofi = fit_adj_cut01)]
+
+# OFI - pick a version
+tmp = readRDS('../../data/demand_shocks/ofi/quarterly_cleaned.RDS')[type == "no earnings, no ibes topQ", list(yyyymm, permno, type = 'OFI', ofi)]
+data = rbind(data, tmp); rm(tmp)
+
+# OFI, cleaned
+tmp = readRDS('tmp/raw_data/cleaning/ofi/residual_daily_ofi.RDS')
+tmp[, ofi_resid := Winsorize(ofi_resid, val = quantile(ofi_resid, probs = c(.005, .995)))]
+tmp[, yyyymm := 100*year(date) + 3*quarter(date)]
+tmp = tmp[, .(obs = length(date), type = 'OFI_resid', ofi = sum(ofi_resid)), .(yyyymm, permno)]
+tmp[, max_obs := max(obs), yyyymm]
+tmp = tmp[obs >= (max_obs - 5)]
+tmp[, c('obs','max_obs') := NULL]
+data = rbind(data, tmp); rm(tmp)
+
+# merge together and save
+data = merge(stock_data, data, by = c('yyyymm','permno'), allow.cartesian = T); rm(stock_data)
+
+dir.create('tmp/raw_data/reg_inputs/', recursive = T, showWarnings = F)
+saveRDS(data, 'tmp/raw_data/reg_inputs/quarterly_fit_and_ofi.RDS')
+
+# # === take a look at the differnt versions
+# data = readRDS('tmp/raw_data/reg_inputs/quarterly_fit_and_ofi.RDS')
+# 
+# feols(ret ~ ofi + I(100*ofi * abs(ofi)) | yyyymm, data[type == 'FIT'], cluster = 'yyyymm')
+# feols(ret ~ ofi + I(100*ofi * abs(ofi)) | yyyymm, data[type == 'OFI'], cluster = 'yyyymm')
+# feols(ret ~ ofi + I(100*ofi * abs(ofi)) | yyyymm, data[type == 'OFI_resid'], cluster = 'yyyymm')
+
+
+```
+
+Add BMI to the quarterly OFI/FIT tables. 
+
+```{r}
+source('runmefirst.R')
+
+# === BMI
+
+# Aditya's data
+data = data.table(read_stata('../../tests/9_russell_rdd/russell_rdd_stock_level_panel.dta'))
+
+# Calculate the log of tot_mktcap_r3
+data$log_tot_mktcap_r3 <- log(data$tot_mktcap_r3)
+
+# Initialize 'band' to 0
+data$band <- 0
+
+# Set 'band' to 1 where conditions are met
+data$band[data$may_mkt_cap_ranks > data$upper_cutoff_rank & 
+            data$may_mkt_cap_ranks < data$lower_cutoff_rank] <- 1
+
+# Initialize 'band_d2' to 0 and then compute its value
+data$band_d2 <- 0
+data$band_d2 <- data$band * data$was_in_2000_in_may
+
+names(data)[names(data) == "BA_Spread_Percentage_1_Year_MA"] <- "ba_spread"
+PS_controls = c("log_tot_mktcap_r3" ,   "band" ,   "was_in_2000_in_may"  ,  "band_d2" ,  "ba_spread" )
+
+# set up the band width filter
+bandwidth = 150
+data[, filter := 0]
+data[ ((abs(dist_up) <= bandwidth)  | (abs(dist_down) <= bandwidth) ), filter := 1]
+
+# compute changes in BMI. bmi is in May, bmi_june is in June. Reccale
+data[, d_bmi := bmi_june - bmi]
+data[, d_bmi := .2 * d_bmi]
+data = data[!is.na(d_bmi) & !is.na(full_ret)]
+
+# just need these
+data = data[filter == 1]
+data[, filter := NULL]
+
+# change into the same format
+setnames(data, c('full_ret','d_bmi'), c('ret','ofi'))
+data[, year := 100*year + 6]
+setnames(data, 'year', 'yyyymm')
+
+# combine with FIT and OFI data
+reg_data = rbind(data[, .(yyyymm, permno, type = 'BMI', ret, ofi)],
+                 readRDS('tmp/raw_data/reg_inputs/quarterly_fit_and_ofi.RDS'))
+dir.create('tmp/raw_data/reg_inputs/', recursive = T, showWarnings = F)
+saveRDS(reg_data, 'tmp/raw_data/reg_inputs/all_ofi_and_ret.RDS'); rm(reg_data)
+
+# === also save BMI-specific controls
+data = data[, c('yyyymm','permno',PS_controls), with = F]
+saveRDS(data, 'tmp/raw_data/controls/controls_for_BMI.RDS')
+
+```
+
+Produce summary statistics for BMI. 
+
+```{r}
+source('runmefirst.R')
+
+data = readRDS('tmp/raw_data/reg_inputs/all_ofi_and_ret.RDS')
+data = data[type == 'BMI'][, type := NULL]
+setnames(data, 'ofi', 'd_bmi')
+data[, d_bmi := 100*d_bmi]
+
+tmp = data.table(obs = nrow(data)/data[, length(unique(yyyymm))]) # num of observations per year
+tmp = cbind(tmp, data[, list(Mean = mean(d_bmi), StDev = sd(d_bmi), 
+                             p01 = quantile(d_bmi, .01), 
+                             p05 = quantile(d_bmi, .05), 
+                             p25 = quantile(d_bmi, .25), 
+                             p50 = quantile(d_bmi, .50), 
+                             p75 = quantile(d_bmi, .75), 
+                             p95 = quantile(d_bmi, .95), 
+                             p99 = quantile(d_bmi, .99))])
+dir.create('tmp/raw_data/sum_stats/', recursive = T, showWarnings = F)
+saveRDS(tmp, 'tmp/raw_data/sum_stats/bmi.RDS')
+
+```
+
+produce summary stats for OFI/FIT. 
+
+```{r}
+source('runmefirst.R')
+
+data = readRDS('tmp/raw_data/reg_inputs/quarterly_fit_and_ofi.RDS')
+data = data[yyyymm >= 199306]
+data[, ofi := 100*ofi]
+data[, ret := 100*ret]
+
+data_ret = data[, .(ret = last(ret)), .(yyyymm, permno)]
+data[, ret := NULL]
+data = dcast(data, yyyymm + permno ~ type, value.var = 'ofi')
+data = merge(data, data_ret, by = c('yyyymm','permno')); rm(data_ret)
+
+# get lagged market cap
+tmp = readRDS('../../data/stocks/prices/quarterly_return.RDS')
+tmp = tmp[, .(yyyymm, permno, me_1)]
+data = merge(data, tmp, by = c('yyyymm','permno')); rm(tmp)
+
+# into long format
+data = data.table(melt(data, id.vars = c('yyyymm','permno')))
+names(data)[3:4] = c('var','xx')
+
+p.getOne = function(this_v){
+  tmp = copy(data[var == this_v])
+  tmp = tmp[!is.na(xx)]
+  return(tmp[, list(var = this_v, 
+                    obs = round(tmp[, length(permno), yyyymm][, mean(V1)]), 
+                    x_mean = mean(xx), x_sd = sd(xx), 
+                    p01 = quantile(xx, .01), 
+                    p05 = quantile(xx, .05), 
+                    p25 = quantile(xx, .25), 
+                    p50 = quantile(xx, .50), 
+                    p75 = quantile(xx, .75), 
+                    p95 = quantile(xx, .95),
+                    p99 = quantile(xx, .99))])
+}
+
+all_vars = unique(data[, var])
+data = Reduce(rbind, lapply(all_vars, p.getOne)); rm(all_vars, p.getOne)
+
+saveRDS(data, 'tmp/raw_data/sum_stats/fit_and_ofi.RDS')
+
+
+```
+
+Put together controls. 
+Code adapted from tests/13_/7_tercile_regressions.Rmd
+
+```{r}
+source('runmefirst.R')
+
+# liquidity chars
+data = readRDS('../../data/stocks/controls/monthly_liquidity_measures_not_lagged.RDS')
+setnames(data, 'me', 'size')
+vv_liq = setdiff(names(data), c('yyyymm','permno'))
+
+# regular characteristics
+tmp = readRDS('../../data/stocks/controls/monthly_characteristics_not_lagged.RDS')
+tmp[, c('size','realized_vol') := NULL] # already part of liquidity chars
+vv_char = setdiff(names(tmp), c('yyyymm','permno'))
+data = merge(data, tmp, by = c('yyyymm','permno'), all.x = T); rm(tmp)
+
+# industry classifications
+tmp = readRDS('../../data/stocks/controls/ff12_industries_zero_mean.RDS')
+vv_ind = setdiff(names(tmp), c('yyyymm','permno'))
+data = merge(data, tmp, by = c('yyyymm','permno'), all.x = T); rm(tmp)
+data_bk = copy(data)
+
+# === monthly version, lagged
+data = copy(data_bk)
+tt = unique(data[, list(yyyymm)])
+tt[, mm := yyyymm - 100*floor(yyyymm/100)]
+tt = tt[, list(yyyymm, yyyymm_next = ifelse(mm == 12, yyyymm + 100 - 11, yyyymm + 1))]
+data = merge(data, tt, by = 'yyyymm'); rm(tt)
+data[, yyyymm := yyyymm_next]
+data[, yyyymm_next := NULL]
+saveRDS(data, 'tmp/raw_data/controls/monthly_controls_lagged.RDS')
+
+# === quarterly version, lagged
+data = copy(data_bk)
+tt = unique(data[, list(yyyymm)])
+tt[, mm := yyyymm - 100*floor(yyyymm/100)]
+tt[, yyyymm_next := ifelse(mm == 12, yyyymm + 100 - 9, yyyymm + 3)]
+tt = tt[mm %in% c(3,6,9,12)]
+tt[, mm := NULL]
+data = merge(data, tt, by = 'yyyymm'); rm(tt)
+data[, yyyymm := yyyymm_next]
+data[, yyyymm_next := NULL]
+saveRDS(data, 'tmp/raw_data/controls/quarterly_controls_lagged.RDS')
+
+# save the list of control names
+tmp = data.table(control_type = c(rep('liquidity', length(vv_liq)), 
+                                  rep('industry', length(vv_ind)), 
+                                  rep('return-predictor', length(vv_char))),
+                 var = c(vv_liq, vv_ind, vv_char))
+
+# give human-readable names
+tmp[control_type == 'liquidity', var_lab := c('Effective Spread','Quoted Spread','Realized Vol',
+                                              'Size','Turnover','Volume')]
+tmp[control_type == 'industry', var_lab := c('Manuf','Chemical','Telecom','Utilities','Bus Equip','Nondurable',
+                                             'Shops','Health','Money','Durable','Energy')]
+tmp[control_type == 'return-predictor', var_lab := c('Accruals','Asset gr','Beta','B/M','Profitability','Ind Mom','Intermediate Mom','1y issuance', '5y issuance', 'Mom', 'Seasonal Mom',
+                                                     'NOA','Reversal')]
+
+saveRDS(tmp, 'tmp/raw_data/controls/controls_classification.RDS')
+
+```
+
+Contemp regression. 
+  Code adapted from tests/13_/6_liquidity_interaction.Rmd
+  New: I decided to not have industries. Also added piecewise regressions. 
+  New: added piecewise for panel. 
+
+```{r}
+# source('runmefirst.R')
+
+# All demand and returns
+data = readRDS('tmp/raw_data/reg_inputs/all_ofi_and_ret.RDS')
+data = data[yyyymm >= 199306] # liq-chars are not available for 199303
+
+# add controls that are specific to BMI
+tmp = readRDS('tmp/raw_data/controls/controls_for_BMI.RDS')
+vv_bmi = setdiff(names(tmp), c('yyyymm','permno'))
+data = merge(data, tmp, by = c('yyyymm','permno'), all.x = T); rm(tmp)
+
+# add the other controls
+tmp = readRDS('tmp/raw_data/controls/quarterly_controls_lagged.RDS')
+data = merge(data, tmp, by = c('yyyymm','permno'), all.x = T); rm(tmp)
+
+# get control variable names
+cdata = readRDS('tmp/raw_data/controls/controls_classification.RDS')
+vv_liq = cdata[control_type == 'liquidity', var]
+vv_ind = cdata[control_type == 'industry', var]
+vv_char = cdata[control_type == 'return-predictor', var]; rm(cdata)
+
+# don't use industries (TODO: streamline code later)
+data[, c(vv_ind) := NULL]
+
+# Re-center characteristics within each time period and demand type
+for (this_v in c(vv_liq, vv_char)){
+  print(this_v)
+  setnames(data, this_v, 'xx')
+  data = merge(data, data[, .(m = mean(xx, na.rm = T)), .(yyyymm,type)], by = c("yyyymm","type"))
+  data[, xx := xx - m]
+  data[, m := NULL]   
+  setnames(data, 'xx',  this_v)
+}
+rm(this_v)
+
+# fill zeros if needed (for these characteristics)
+data[is.na(data)] = 0
+char_list = c(vv_char, vv_liq)
+data[, ofi_absofi := ofi * abs(ofi)]
+data_bk = copy(data)
+
+# regression equation
+ff0_1 = '1'
+ff0_2 = paste0(c(vv_char), collapse = '+')
+ff0_3 = paste0(c(vv_char, vv_liq), collapse = '+')
+
+# == Fama-MacBeth. Progressively add interactions with ofi
+
+# Takes around 2-3 mins
+out_bk = data.table()
+for (this_type in unique(data_bk[, type])){
+  print(this_type)
+  
+  tic()
+  data = copy(data_bk[type == this_type])
+  
+  # function to do Fama-MacBeth
+  p.get_one_fm = function(ff){
+    
+    p.get_one_period = function(this_ym){
+      ols = lm(paste0('ret ~ ofi + ofi_absofi + ', ff), data[yyyymm == this_ym])
+      ols_no_ofi = lm(paste0('ret ~ ', ff), data[yyyymm == this_ym])
+      out = data.table(yyyymm = this_ym, var = names(coef(ols)), coef = ols$coef, 
+                       r2 = var(ols$fitted.values)/var(ols$model$ret), 
+                       r2_no_ofi = var(ols_no_ofi$fitted.values)/var(ols_no_ofi$model$ret))
+      return(out)
+    }
+    
+    # first regress all together
+    nc = detectCores() - 2
+    out = rbindlist(mclapply(unique(data[, yyyymm]), p.get_one_period, mc.cores = nc)); gc()
+    
+    tt = unique(out[, .(yyyymm, r2, r2_no_ofi)])
+    tt = tt[, .(r2 = mean(r2), r2_no_ofi = mean(r2_no_ofi))]
+    
+    out = out[, list(coef = mean(coef, na.rm = T), 
+                     se = sd(coef, na.rm = T)/sqrt(sum(!is.na(coef)))), var]
+    out[, r2 := tt[, r2]]
+    out[, r2_no_ofi := tt[, r2_no_ofi]]; rm(tt)
+    out[, obs := nrow(data)]
+    out[, idx := idx]
+    return(out)
+  }
+  
+  # ()
+  idx = 1
+  ff = copy(ff0_1)
+  if (this_type == 'BMI'){
+    ff = paste0(ff, '+', paste0(vv_bmi, collapse = '+'))}
+  out = p.get_one_fm(ff)
+  
+  # (char)
+  idx = 2
+  ff = copy(ff0_2)
+  if (this_type == 'BMI'){
+    ff = paste0(ff, '+', paste0(vv_bmi, collapse = '+'))}
+  out = rbind(out, p.get_one_fm(ff))
+  
+  # (char, liq)
+  idx = 3
+  ff = copy(ff0_3)
+  if (this_type == 'BMI'){
+    ff = paste0(ff, '+', paste0(vv_bmi, collapse = '+'))}
+  out = rbind(out, p.get_one_fm(ff))
+  
+  # then add interactions
+  for (this_v in c(vv_char, vv_liq)){
+    # print(this_v)
+    
+    setnames(data, this_v, 'xx')
+    data[, yy := xx * ofi]
+    setnames(data, c('xx','yy'), c(this_v, paste0('ofi_', this_v)))
+    ff = paste0(ff, ' + ofi_', this_v)
+    idx = idx + 1
+    
+    out = rbind(out, p.get_one_fm(ff))
+  }
+  
+  # name the variables being added
+  tmp = data.table(idx = 1:(length(char_list)+4), 
+                   var_added = c('none_init','vv_char','vv_char+vv_liq','none',char_list), 
+                   var_type = c(rep('',4), rep('return-predicting chars', length(vv_char)),
+                                rep('liquidity', length(vv_liq))))
+  out = merge(out, tmp, by = 'idx', all.x = T); rm(tmp)
+  out[, type := this_type]
+  
+  out_bk = rbind(out_bk, out)
+  toc()
+}
+
+dir.create('tmp/price_impact/regression_contemp/', recursive = T, showWarnings = F)
+saveRDS(out_bk, 'tmp/price_impact/regression_contemp/full_sample.RDS')
+
+# check coefs
+range(out_bk[(var == 'ofi_absofi') & (type != 'OFI'), coef])
+range(out_bk[(var == 'ofi_absofi') & (type != 'OFI'), coef/se])
+
+# == FM with stdev-based bin interactions. Also keep track of the cutoffs
+
+out_bk = data.table()
+for (this_type in unique(data_bk[, type])){
+  print(this_type)
+  
+  tic()
+  data = copy(data_bk[type == this_type])
+  
+  # bins
+  data = merge(data, data[, .(ss = sd(ofi)), yyyymm], by = 'yyyymm')
+  data[, bin := 1]
+  data[abs(ofi) > ss, bin := 2]
+  data[abs(ofi) > 2*ss, bin := 3]
+  data[, ofi_bin1 := ifelse(bin == 1, ofi, 0)]
+  data[, ofi_bin2 := ifelse(bin == 2, ofi, 0)]
+  data[, ofi_bin3 := ifelse(bin == 3, ofi, 0)]
+  
+  # function to do Fama-MacBeth, and also to record coef differences
+  p.get_one_fm = function(ff){
+    
+    p.get_one_period = function(this_ym){
+      ols = lm(paste0('ret ~ ofi_bin1 + ofi_bin2 + ofi_bin3 + ', ff), data[yyyymm == this_ym])
+      ols_no_ofi = lm(paste0('ret ~ ', ff), data[yyyymm == this_ym])
+      out = data.table(yyyymm = this_ym, var = names(coef(ols)), coef = ols$coef, 
+                       r2 = var(ols$fitted.values)/var(ols$model$ret), 
+                       r2_no_ofi = var(ols_no_ofi$fitted.values)/var(ols_no_ofi$model$ret),
+                       obs = nrow(data[yyyymm == this_ym]))
+      return(out)
+    }
+    
+    # first regress all together
+    nc = detectCores() - 2
+    tmp = rbindlist(mclapply(unique(data[, yyyymm]), p.get_one_period, mc.cores = nc))[var %in% paste0('ofi_bin', 1:3)]; gc()
+    
+    cc = as.matrix(tmp[, mean(coef), var][, V1])
+    C = cov(cast(tmp[, list(yyyymm, var, coef)], yyyymm ~ var, value = 'coef')[, 2:4])/nrow(tmp)
+    
+    b_12 = matrix(c(-1,1,0))
+    b_23 = matrix(c(0,-1,1))
+    b_13 = matrix(c(-1,0,1))
+    
+    out = data.table(type = this_type, 
+                     r2 = mean(tmp[, r2]), 
+                     r2_no_ofi = mean(tmp[, r2_no_ofi]), 
+                     obs = unique(tmp[, .(yyyymm, obs)])[, sum(obs)], 
+                     var = c('M1','M2','M3','M2-M1','M3-M2','M3-M1'),
+                     coef = c(cc, 
+                              (t(b_12) %*% cc)[1],
+                              (t(b_23) %*% cc)[1], 
+                              (t(b_13) %*% cc)[1]),
+                     se = c(sqrt(diag(C)), 
+                            sqrt((t(b_12) %*% C %*% b_12)[1]),
+                            sqrt((t(b_23) %*% C %*% b_23)[1]),
+                            sqrt((t(b_13) %*% C %*% b_13)[1])))
+    out[, tstat := coef/se]
+    out[, idx := idx]
+    return(out)
+  }
+  
+  # ()
+  idx = 1
+  ff = copy(ff0_1)
+  if (this_type == 'BMI'){
+    ff = paste0(ff, '+', paste0(vv_bmi, collapse = '+'))}
+  out = p.get_one_fm(ff)
+  
+  # (char)
+  idx = 2
+  ff = copy(ff0_2)
+  if (this_type == 'BMI'){
+    ff = paste0(ff, '+', paste0(vv_bmi, collapse = '+'))}
+  out = rbind(out, p.get_one_fm(ff))
+  
+  # (char, liq)
+  idx = 3
+  ff = copy(ff0_3)
+  if (this_type == 'BMI'){
+    ff = paste0(ff, '+', paste0(vv_bmi, collapse = '+'))}
+  out = rbind(out, p.get_one_fm(ff))
+  
+  # then add interactions
+  for (this_v in c(vv_char, vv_liq)){
+    # print(this_v)
+    
+    setnames(data, this_v, 'xx')
+    data[, yy := xx * ofi]
+    setnames(data, c('xx','yy'), c(this_v, paste0('ofi_', this_v)))
+    ff = paste0(ff, ' + ofi_', this_v)
+    idx = idx + 1
+    
+    out = rbind(out, p.get_one_fm(ff))
+  }
+  
+  # name the variables being added
+  tmp = data.table(idx = 1:(length(char_list)+4), 
+                   var_added = c('none_init','vv_char','vv_char+vv_liq','none',char_list), 
+                   var_type = c(rep('',4), rep('return-predicting chars', length(vv_char)),
+                                rep('liquidity', length(vv_liq))))
+  out = merge(out, tmp, by = 'idx', all.x = T); rm(tmp)
+  out[, type := this_type]
+  
+  # also keep track of sd(OFI)
+  out[, stdev_ofi := data[, .(ss = last(ss)), yyyymm][, mean(ss)]]
+  out_bk = rbind(out_bk, out)
+  toc()
+}
+
+dir.create('tmp/price_impact/multiplier_by_shock_size_quarterly/', showWarnings = F, recursive = T)
+saveRDS(out_bk, 'tmp/price_impact/multiplier_by_shock_size_quarterly/fm_by_stdev_based_bins.RDS')
+
+
+# # === FM with pos/neg (not clear)
+# 
+# # takes around X mins
+# out_bk = data.table()
+# for (this_type in unique(data_bk[, type])){
+#   print(this_type)
+#   
+#   tic()
+#   data = copy(data_bk[type == this_type])
+#   
+#   # function to do Fama-MacBeth
+#   p.get_one_fm = function(ff){
+#     
+#     p.get_one_period = function(this_ym){
+#       # ols = lm(paste0('ret ~ ofi + I(ofi_absofi * (ofi >= 0)) + I(ofi_absofi * (ofi < 0)) + ', ff), data[yyyymm == this_ym])
+#       ols = lm(paste0('ret ~ ofi + ofi_absofi + I(ofi_absofi * (ofi < 0)) + ', ff), data[yyyymm == this_ym])
+#       ols_no_ofi = lm(paste0('ret ~ ', ff), data[yyyymm == this_ym])
+#       out = data.table(yyyymm = this_ym, var = names(coef(ols)), coef = ols$coef, 
+#                        r2 = var(ols$fitted.values)/var(ols$model$ret), 
+#                        r2_no_ofi = var(ols_no_ofi$fitted.values)/var(ols_no_ofi$model$ret))
+#       return(out)
+#     }
+#     
+#     # first regress all together
+#     nc = detectCores() - 2
+#     out = rbindlist(mclapply(unique(data[, yyyymm]), p.get_one_period, mc.cores = nc)); gc()
+#     
+#     tt = unique(out[, .(yyyymm, r2, r2_no_ofi)])
+#     tt = tt[, .(r2 = mean(r2), r2_no_ofi = mean(r2_no_ofi))]
+#     
+#     out = out[, list(coef = mean(coef, na.rm = T), 
+#                      se = sd(coef, na.rm = T)/sqrt(sum(!is.na(coef)))), var]
+#     out[, r2 := tt[, r2]]
+#     out[, r2_no_ofi := tt[, r2_no_ofi]]; rm(tt)
+#     out[, obs := nrow(data)]
+#     out[, idx := idx]
+#     return(out)
+#   }
+#   
+#   # ()
+#   idx = 1
+#   ff = copy(ff0_1)
+#   if (this_type == 'BMI'){
+#     ff = paste0(ff, '+', paste0(vv_bmi, collapse = '+'))}
+#   out = p.get_one_fm(ff)
+#   
+#   # (char)
+#   idx = 2
+#   ff = copy(ff0_2)
+#   if (this_type == 'BMI'){
+#     ff = paste0(ff, '+', paste0(vv_bmi, collapse = '+'))}
+#   out = rbind(out, p.get_one_fm(ff))
+#   
+#   # (char, liq)
+#   idx = 3
+#   ff = copy(ff0_3)
+#   if (this_type == 'BMI'){
+#     ff = paste0(ff, '+', paste0(vv_bmi, collapse = '+'))}
+#   out = rbind(out, p.get_one_fm(ff))
+#   
+#   # then add interactions
+#   for (this_v in c(vv_char, vv_liq)){
+#     # print(this_v)
+#     
+#     setnames(data, this_v, 'xx')
+#     data[, yy := xx * ofi]
+#     setnames(data, c('xx','yy'), c(this_v, paste0('ofi_', this_v)))
+#     ff = paste0(ff, ' + ofi_', this_v)
+#     idx = idx + 1
+#     
+#     out = rbind(out, p.get_one_fm(ff))
+#   }
+#   
+#   # name the variables being added
+#   tmp = data.table(idx = 1:(length(char_list)+4), 
+#                    var_added = c('none_init','vv_char','vv_char+vv_liq','none',char_list), 
+#                    var_type = c(rep('',4), rep('return-predicting chars', length(vv_char)),
+#                                 rep('liquidity', length(vv_liq))))
+#   out = merge(out, tmp, by = 'idx', all.x = T); rm(tmp)
+#   out[, type := this_type]
+#   
+#   out_bk = rbind(out_bk, out)
+#   toc()
+# }
+# out_bk[, tstat := coef/se]
+# 
+# out_bk = out_bk[type != 'OFI']
+# out_bk[type == 'OFI_resid', type := 'OFI']
+# 
+# # vv = c('ofi','I(ofi_absofi * (ofi >= 0))','I(ofi_absofi * (ofi < 0))')
+# vv = c('ofi','ofi_absofi','I(ofi_absofi * (ofi < 0))')
+# dcast(out_bk[(var %in% vv) & (idx %in% 1:3)], var ~ paste0(type, '_', idx), value.var = 'coef')
+# dcast(out_bk[(var %in% vv) & (idx %in% 1:3)], var ~ paste0(type, '_', idx), value.var = 'tstat')
+
+# === panel regression as robustness
+
+out_bk = data.table()
+for (this_type in unique(data_bk[, type])){
+  print(this_type)
+  
+  tic()
+  data = copy(data_bk[type == this_type])
+  data[, ret := ret/100]
+  data[, ofi := ofi/100]
+  data = data[0 == rowSums(is.na(data))]
+  
+  out = data.table()
+  
+  # ()
+  idx = 1
+  ff = copy(ff0_1)
+  if (this_type == 'BMI'){
+    ff = paste0(ff, '+', paste0(vv_bmi, collapse = '+'))}
+  ff = paste0(ff, ' | yyyymm')
+  
+  ols = feols(as.formula(paste0('ret ~ ofi + ofi_absofi + ', ff)), data, cluster = c('yyyymm','permno'))
+  ols_no_ofi = feols(as.formula(paste0('ret ~ ', ff)), data, cluster = 'yyyymm')
+  out = rbind(out, data.table(spec_idx = idx, type = this_type, var = names(coef(ols)), coef = coef(ols), 
+                              se = sqrt(diag(vcov(ols))), obs = nrow(data), 
+                              r2 = r2(ols)['ar2'], r2_no_ofi = r2(ols_no_ofi)['ar2']))
+  
+  
+  # (char)
+  idx = 2
+  ff = copy(ff0_2)
+  if (this_type == 'BMI'){
+    ff = paste0(ff, '+', paste0(vv_bmi, collapse = '+'))}
+  ff = paste0(ff, ' | yyyymm')
+  
+  ols = feols(as.formula(paste0('ret ~ ofi + ofi_absofi + ', ff)), data, cluster = c('yyyymm','permno'))
+  ols_no_ofi = feols(as.formula(paste0('ret ~ ', ff)), data, cluster = 'yyyymm')
+  out = rbind(out, data.table(spec_idx = idx, type = this_type, var = names(coef(ols)), coef = coef(ols), 
+                              se = sqrt(diag(vcov(ols))), obs = nrow(data), 
+                              r2 = r2(ols)['ar2'], r2_no_ofi = r2(ols_no_ofi)['ar2']))
+  
+  
+  # (char, liq)
+  idx = 3
+  ff = copy(ff0_3)
+  if (this_type == 'BMI'){
+    ff = paste0(ff, '+', paste0(vv_bmi, collapse = '+'))}
+  ff = paste0(ff, ' | yyyymm')
+  
+  ols = feols(as.formula(paste0('ret ~ ofi + ofi_absofi + ', ff)), data, cluster = c('yyyymm','permno'))
+  ols_no_ofi = feols(as.formula(paste0('ret ~ ', ff)), data, cluster = 'yyyymm')
+  out = rbind(out, data.table(spec_idx = idx, type = this_type, var = names(coef(ols)), coef = coef(ols), 
+                              se = sqrt(diag(vcov(ols))), obs = nrow(data), 
+                              r2 = r2(ols)['ar2'], r2_no_ofi = r2(ols_no_ofi)['ar2']))
+  
+  
+  # # then add interactions
+  # for (this_v in c(vv_char, vv_liq)){
+  #   # print(this_v)
+  #   
+  #   setnames(data, this_v, 'xx')
+  #   data[, yy := xx * ofi]
+  #   setnames(data, c('xx','yy'), c(this_v, paste0('ofi_', this_v)))
+  #   ff = paste0(ff, ' + ofi_', this_v)
+  #   idx = idx + 1
+  #   
+  #   out = rbind(out, p.get_one_fm(ff))
+  # }
+  # 
+  # # name the variables being added
+  # tmp = data.table(idx = 1:(length(char_list)+4), 
+  #                  var_added = c('none_init','vv_char','vv_char+vv_liq','none',char_list), 
+  #                  var_type = c(rep('',4), rep('return-predicting chars', length(vv_char)),
+  #                               rep('liquidity', length(vv_liq))))
+  # out = merge(out, tmp, by = 'idx', all.x = T); rm(tmp)
+  # out[, type := this_type]
+  # 
+  out_bk = rbind(out_bk, out)
+  toc()
+}
+
+saveRDS(out_bk, 'tmp/price_impact/regression_contemp/full_sample_panel.RDS')
+
+# === panel with std based-bins
+
+out_bk = data.table()
+for (this_type in unique(data_bk[, type])){
+  print(this_type)
+  
+  tic()
+  data = copy(data_bk[type == this_type])
+  data[, ret := ret/100]
+  data[, ofi := ofi/100]
+  data = data[0 == rowSums(is.na(data))]
+  
+  # bins
+  data = merge(data, data[, .(ss = sd(ofi)), yyyymm], by = 'yyyymm')
+  data[, bin := 1]
+  data[abs(ofi) > ss, bin := 2]
+  data[abs(ofi) > 2*ss, bin := 3]
+  data[, ofi_bin1 := ifelse(bin == 1, ofi, 0)]
+  data[, ofi_bin2 := ifelse(bin == 2, ofi, 0)]
+  data[, ofi_bin3 := ifelse(bin == 3, ofi, 0)]
+  
+  out = data.table()
+  
+  # ()
+  ff = copy(ff0_1)
+  if (this_type == 'BMI'){
+    ff = paste0(ff, '+', paste0(vv_bmi, collapse = '+'))}
+  ff = paste0(ff, ' | yyyymm')
+  
+  ols = feols(as.formula(paste0('ret ~ ofi_bin1 + ofi_bin2 + ofi_bin3 + ', ff)), data, cluster = c('yyyymm','permno'))
+  ols_no_ofi = feols(as.formula(paste0('ret ~ ', ff)), data, cluster = 'yyyymm')
+  
+  # get coef differences
+  cc = as.matrix(coef(ols)[1:3])
+  C = vcov(ols)[1:3,1:3]
+  
+  b_12 = matrix(c(-1,1,0))
+  b_23 = matrix(c(0,-1,1))
+  b_13 = matrix(c(-1,0,1))
+  
+  out = rbind(out, data.table(spec_idx = 1, type = this_type, 
+                   r2 = r2(ols)['ar2'], 
+                   r2_no_ofi = r2(ols_no_ofi)['ar2'], 
+                   obs = nrow(data), 
+                   var = c('M1','M2','M3','M2-M1','M3-M2','M3-M1'),
+                   coef = c(cc, 
+                            (t(b_12) %*% cc)[1],
+                            (t(b_23) %*% cc)[1], 
+                            (t(b_13) %*% cc)[1]),
+                   se = c(sqrt(diag(C)), 
+                          sqrt((t(b_12) %*% C %*% b_12)[1]),
+                          sqrt((t(b_23) %*% C %*% b_23)[1]),
+                          sqrt((t(b_13) %*% C %*% b_13)[1])))[, tstat := coef/se])
+  
+  
+  
+  
+  
+  # (char)
+  ff = copy(ff0_2)
+  if (this_type == 'BMI'){
+    ff = paste0(ff, '+', paste0(vv_bmi, collapse = '+'))}
+  ff = paste0(ff, ' | yyyymm')
+  
+  ols = feols(as.formula(paste0('ret ~ ofi_bin1 + ofi_bin2 + ofi_bin3 + ', ff)), data, cluster = c('yyyymm','permno'))
+  ols_no_ofi = feols(as.formula(paste0('ret ~ ', ff)), data, cluster = 'yyyymm')
+  
+  # get coef differences
+  cc = as.matrix(coef(ols)[1:3])
+  C = vcov(ols)[1:3,1:3]
+  
+  b_12 = matrix(c(-1,1,0))
+  b_23 = matrix(c(0,-1,1))
+  b_13 = matrix(c(-1,0,1))
+  
+  out = rbind(out, data.table(spec_idx = 2, type = this_type, 
+                   r2 = r2(ols)['ar2'], 
+                   r2_no_ofi = r2(ols_no_ofi)['ar2'], 
+                   obs = nrow(data), 
+                   var = c('M1','M2','M3','M2-M1','M3-M2','M3-M1'),
+                   coef = c(cc, 
+                            (t(b_12) %*% cc)[1],
+                            (t(b_23) %*% cc)[1], 
+                            (t(b_13) %*% cc)[1]),
+                   se = c(sqrt(diag(C)), 
+                          sqrt((t(b_12) %*% C %*% b_12)[1]),
+                          sqrt((t(b_23) %*% C %*% b_23)[1]),
+                          sqrt((t(b_13) %*% C %*% b_13)[1])))[, tstat := coef/se])
+  
+  
+  
+  
+  # (char, liq)
+  ff = copy(ff0_3)
+  if (this_type == 'BMI'){
+    ff = paste0(ff, '+', paste0(vv_bmi, collapse = '+'))}
+  ff = paste0(ff, ' | yyyymm')
+  
+  ols = feols(as.formula(paste0('ret ~ ofi_bin1 + ofi_bin2 + ofi_bin3 + ', ff)), data, cluster = c('yyyymm','permno'))
+  ols_no_ofi = feols(as.formula(paste0('ret ~ ', ff)), data, cluster = 'yyyymm')
+  
+  # get coef differences
+  cc = as.matrix(coef(ols)[1:3])
+  C = vcov(ols)[1:3,1:3]
+  
+  b_12 = matrix(c(-1,1,0))
+  b_23 = matrix(c(0,-1,1))
+  b_13 = matrix(c(-1,0,1))
+  
+  out = rbind(out, data.table(spec_idx = 3, type = this_type, 
+                   r2 = r2(ols)['ar2'], 
+                   r2_no_ofi = r2(ols_no_ofi)['ar2'], 
+                   obs = nrow(data), 
+                   var = c('M1','M2','M3','M2-M1','M3-M2','M3-M1'),
+                   coef = c(cc, 
+                            (t(b_12) %*% cc)[1],
+                            (t(b_23) %*% cc)[1], 
+                            (t(b_13) %*% cc)[1]),
+                   se = c(sqrt(diag(C)), 
+                          sqrt((t(b_12) %*% C %*% b_12)[1]),
+                          sqrt((t(b_23) %*% C %*% b_23)[1]),
+                          sqrt((t(b_13) %*% C %*% b_13)[1])))[, tstat := coef/se])
+  
+  
+  # # then add interactions
+  # for (this_v in c(vv_char, vv_liq)){
+  #   # print(this_v)
+  #   
+  #   setnames(data, this_v, 'xx')
+  #   data[, yy := xx * ofi]
+  #   setnames(data, c('xx','yy'), c(this_v, paste0('ofi_', this_v)))
+  #   ff = paste0(ff, ' + ofi_', this_v)
+  #   idx = idx + 1
+  #   
+  #   out = rbind(out, p.get_one_fm(ff))
+  # }
+  # 
+  # # name the variables being added
+  # tmp = data.table(idx = 1:(length(char_list)+4), 
+  #                  var_added = c('none_init','vv_char','vv_char+vv_liq','none',char_list), 
+  #                  var_type = c(rep('',4), rep('return-predicting chars', length(vv_char)),
+  #                               rep('liquidity', length(vv_liq))))
+  # out = merge(out, tmp, by = 'idx', all.x = T); rm(tmp)
+  # out[, type := this_type]
+  # 
+  out_bk = rbind(out_bk, out)
+  toc()
+}
+
+saveRDS(out_bk, 'tmp/price_impact/regression_contemp/full_sample_panel_with_stdev_bins.RDS')
+
+```
+
+OFI price multiplier by demand shock sizes (piecewise)
+Result changed a bit from earlier... I made a mistake regarding the timing of characteristics last time (had look-ahead bias.)
+
+```{r}
+# source('runmefirst.R')
+
+# quarterly data
+data = readRDS('tmp/raw_data/reg_inputs/quarterly_fit_and_ofi.RDS')
+data = data[type == 'OFI_resid']
+
+# split into sub-samples
+tmp = unique(data[, list(yyyymm)])
+tmp[, yyyy := floor(yyyymm/100)]
+tt = unique(tmp[, list(yyyy)])
+tt = rbind(data.table(yyyy = 1993), tt)
+tt[yyyy %in% 1993:1999, bin_period := 1]
+tt[yyyy %in% 2000:2007, bin_period := 2]
+tt[yyyy %in% 2008:2015, bin_period := 3]
+tt[yyyy %in% 2016:2022, bin_period := 4]
+tt = merge(tt, tt[, list(lab_period = paste0(min(yyyy), '-', max(yyyy))), bin_period], by = 'bin_period')
+tmp = merge(tmp, tt, by = 'yyyy'); rm(tt)
+tmp[, yyyy := NULL]
+data = merge(data, tmp, by = 'yyyymm'); rm(tmp)
+
+# # cut by ofi sizes
+# data[, bin := 1]
+# cc = c(.025, .05)
+# this_bin = 2
+# for (this_c in cc){
+#   data[abs(ofi) > this_c, bin := this_bin]
+#   this_bin = this_bin + 1
+# }
+
+data = merge(data, data[, .(ss = sd(ofi)), yyyymm], by = 'yyyymm')
+data[, bin := 1]
+data[abs(ofi) > ss, bin := 2]
+data[abs(ofi) > 2*ss, bin := 3]
+
+data[, ofi_bin1 := ifelse(bin == 1, ofi, 0)]
+data[, ofi_bin2 := ifelse(bin == 2, ofi, 0)]
+data[, ofi_bin3 := ifelse(bin == 3, ofi, 0)]
+
+# add controls
+tmp = readRDS('tmp/raw_data/controls/quarterly_controls_lagged.RDS')
+data = merge(data, tmp, by = c('yyyymm','permno'), all.x = T); rm(tmp)
+
+# get control variable names
+cdata = readRDS('tmp/raw_data/controls/controls_classification.RDS')
+# vv_ind = cdata[control_type == 'industry', var]
+vv_liq = cdata[control_type == 'liquidity', var]
+vv_char = cdata[control_type == 'return-predictor', var]; rm(cdata)
+
+# Re-center characteristics within each time period and demand type
+for (this_v in c(vv_liq, vv_char)){
+  print(this_v)
+  setnames(data, this_v, 'xx')
+  data = merge(data, data[, .(m = mean(xx, na.rm = T)), .(yyyymm,type)], by = c("yyyymm","type"))
+  data[, xx := xx - m]
+  data[, m := NULL]   
+  setnames(data, 'xx',  this_v)
+}
+rm(this_v)
+
+# fill zeros if needed (for these characteristics)
+data[is.na(data)] = 0
+char_list = c(vv_liq, vv_char)
+
+# regression equation
+ff0 = paste0(char_list, collapse = '+')
+data_bk = copy(data)
+
+# regression equation
+ff = 'ret ~ ofi_bin1 + ofi_bin2 + ofi_bin3'
+
+# # === panel
+# 
+# p.getOne = function(this_bin){
+#   
+#   # bin = 0 is the full sample
+#   if (this_bin == 0){
+#     tmp = copy(data)
+#   }else{
+#     tmp = copy(data[bin_period == this_bin])
+#   }
+#   
+#   ols = feols(as.formula(paste0(ff, ' | yyyymm')), tmp, cluster = c('yyyymm','permno'))
+#   cc = matrix(coef(ols)[1:3])
+#   C = vcov(ols)[1:3,1:3]
+#   
+#   b_12 = matrix(c(-1,1,0))
+#   b_23 = matrix(c(0,-1,1))
+#   b_13 = matrix(c(-1,0,1))
+#   
+#   out = data.table(bin_period = this_bin, obs = ols$nobs, r2 = r2(ols)['ar2'], 
+#                    var = c('M1','M2','M3','M2-M1','M3-M2','M3-M1'),
+#                    coef = c(cc, 
+#                             (t(b_12) %*% cc)[1],
+#                             (t(b_23) %*% cc)[1], 
+#                             (t(b_13) %*% cc)[1]),
+#                    se = c(sqrt(diag(C)), 
+#                           sqrt((t(b_12) %*% C %*% b_12)[1]),
+#                           sqrt((t(b_23) %*% C %*% b_23)[1]),
+#                           sqrt((t(b_13) %*% C %*% b_13)[1])))
+#   out[, tstat := coef/se]
+#   out[, abs_ofi := c(tmp[, mean(abs(ofi)), bin][order(bin), V1], rep(NA, 3))]
+#   return(out)
+# }
+# 
+# out = Reduce(rbind, mclapply(0:4, p.getOne, mc.cores = nc))
+# out = merge(out, unique(data[, list(bin_period, lab_period)]), by = 'bin_period', all.x = T)
+# out[is.na(lab_period), lab_period := 'full-sample']
+# 
+# dir.create('tmp/price_impact/multiplier_by_shock_size_quarterly/', recursive = T)
+# saveRDS(out, 'tmp/price_impact/multiplier_by_shock_size_quarterly/panel.RDS')
+
+# === FM
+
+p.get_one_period = function(this_ym){
+  ols = lm(ff, data[yyyymm == this_ym])
+  return(data.table(yyyymm = this_ym, var = names(coef(ols)), coef = coef(ols), 
+                    r2 = summary(ols)$r.))
+}
+
+# first estimate by year
+yms = sort(unique(data[, yyyymm]))
+out = Reduce(rbind, mclapply(yms, p.get_one_period, mc.cores = nc)); gc()
+out = out[grepl('ofi', var)]
+out = merge(out, data[, .(obs = length(.I)), yyyymm], by = 'yyyymm')
+out_bk = copy(out)
+
+
+
+# for each sub-sample, get comparisons
+p.getOne = function(this_bin){
+  
+  # bin = 0 is the full sample
+  if (this_bin == 0){
+    tmp = copy(out_bk)
+  }else{
+    tmp = copy(out_bk[yyyymm %in% data[bin_period == this_bin, unique(yyyymm)]])
+  }
+  
+  # point estimate and covariance
+  cc = as.matrix(tmp[, mean(coef), var][, V1])
+  C = cov(cast(tmp[, list(yyyymm, var, coef)], yyyymm ~ var)[, 2:4])/nrow(tmp)
+  
+  b_12 = matrix(c(-1,1,0))
+  b_23 = matrix(c(0,-1,1))
+  b_13 = matrix(c(-1,0,1))
+  
+  out = data.table(bin_period = this_bin, r2 = mean(tmp[, r2]), 
+                   obs = unique(tmp[, .(yyyymm, obs)])[, sum(obs)], 
+                   var = c('M1','M2','M3','M2-M1','M3-M2','M3-M1'),
+                   coef = c(cc, 
+                            (t(b_12) %*% cc)[1],
+                            (t(b_23) %*% cc)[1], 
+                            (t(b_13) %*% cc)[1]),
+                   se = c(sqrt(diag(C)), 
+                          sqrt((t(b_12) %*% C %*% b_12)[1]),
+                          sqrt((t(b_23) %*% C %*% b_23)[1]),
+                          sqrt((t(b_13) %*% C %*% b_13)[1])))
+  out[, tstat := coef/se]
+  return(out)
+}
+
+out = Reduce(rbind, mclapply(0:4, p.getOne, mc.cores = nc)); gc()
+
+dcast(out[var %in% paste0('M',1:3)], var ~ bin_period, value.var = 'coef')
+# dcast(out[var %in% paste0('M',1:3)], var ~ bin_period, value.var = 'tstat')
+
+to_dir = 'tmp/price_impact/multiplier_by_shock_size_quarterly/'
+dir.create(to_dir, showWarnings = F, recursive = T)
+saveRDS(out, paste0(to_dir, 'fm.RDS'))
+
+# dcast(out, var ~ bin_period, value.var = 'tstat')
+
+```
+
+Compute rolling sigma(d) and save. 
+Code adapted from 13_main_result_robustness/10_20250726
+
+```{r}
+# source('~/.runmefirst')
+
+data = readRDS('tmp/raw_data/reg_inputs/quarterly_fit_and_ofi.RDS')
+data = data[type != 'BMI']
+
+# use up to 12q lags
+tmp = unique(data[, .(yyyymm)])[order(yyyymm)][, idx := .I]
+data = merge(data, tmp, by = c('yyyymm')); rm(tmp)
+
+# get lags
+for (i in 1:12){
+  print(i)
+  data = merge(data, data[, .(idx = idx+i, type, permno, xx = ofi)], by = c('idx','type','permno'), all.x = T)
+  setnames(data, 'xx', paste0('ofi_', i))
+}
+
+# compute standard errors
+ofi_matrix <- as.matrix(data[, .SD, .SDcols = paste0("ofi_", 1:12)])
+
+X = copy(ofi_matrix[,1:4])
+idx = rowSums(is.na(X)) == 0
+sd_values = apply(X[idx,], 1, sd)
+data[idx, sd_ofi_4q := sd_values]
+
+X = copy(ofi_matrix[,1:8])
+idx = rowSums(is.na(X)) == 0
+sd_values = apply(X[idx,], 1, sd)
+data[idx, sd_ofi_8q := sd_values]
+
+X = copy(ofi_matrix[,1:12])
+idx = rowSums(is.na(X)) == 0
+sd_values = apply(X[idx,], 1, sd)
+data[idx, sd_ofi_12q := sd_values]
+
+rm(X, ofi_matrix, idx, sd_values)
+
+# save
+data = data[, .(yyyymm, permno, type, sd_ofi_4q, sd_ofi_8q, sd_ofi_12q)]
+data = data.table(melt(data, id.vars = c('yyyymm','permno','type')))
+names(data)[4:5] = c('spec', 'std_ofi')
+data[, spec := as.character(spec)]
+
+# require having some data
+data = merge(data, unique(data[!is.na(std_ofi), .(yyyymm, permno)]), by = c('yyyymm','permno'))
+data = data[yyyymm >= 199303]
+
+saveRDS(data, 'tmp/raw_data/reg_inputs/quarterly_fit_and_ofi_lagged_rolling_stdev.RDS')
+
+```
+
+Estimate contemp regression with the standardized d. 
+  Current: try binned specifications. 
+
+```{r}
+# source('runmefirst.R')
+
+# All demand and returns
+data = readRDS('tmp/raw_data/reg_inputs/quarterly_fit_and_ofi.RDS')
+data = data[yyyymm >= 199306] # liq-chars are not available for 199303
+data = data[type != 'BMI']
+
+# merge with lagged stdev
+tmp = readRDS('tmp/raw_data/reg_inputs/quarterly_fit_and_ofi_lagged_rolling_stdev.RDS')
+tmp = tmp[0 == rowSums(is.na(tmp))]
+tmp[, std_ofi := Winsorize(std_ofi, val = quantile(std_ofi, probs = c(.01, .99))), .(type, spec)]
+
+# translate lags
+tmp[, spec := gsub('sd_ofi_','',spec)]
+tmp[, spec := as.integer(gsub('q','',spec))]
+setnames(tmp, 'spec', 'stdev_lag')
+data = merge(data, tmp, by = c('yyyymm','permno','type'), allow.cartesian = T); rm(tmp)
+
+# standardize
+setnames(data, 'ofi', 'ofi_raw')
+data[, ofi := ofi_raw/std_ofi]
+data[, ofi := Winsorize(ofi, val = quantile(ofi, probs = c(.001, .999))), .(type, stdev_lag)]
+data[, scaling := sd(ofi_raw)/sd(ofi), .(type, stdev_lag)]
+data[, ofi := ofi * scaling]
+data[, c('scaling','ofi_raw','std_ofi') := NULL]
+
+# add the other controls
+tmp = readRDS('tmp/raw_data/controls/quarterly_controls_lagged.RDS')
+data = merge(data, tmp, by = c('yyyymm','permno'), all.x = T); rm(tmp)
+
+# get control variable names
+cdata = readRDS('tmp/raw_data/controls/controls_classification.RDS')
+vv_liq = cdata[control_type == 'liquidity', var]
+vv_char = cdata[control_type == 'return-predictor', var]; rm(cdata)
+
+# change type
+data[, spec := paste0(type, '-', stdev_lag)]
+
+# Re-center characteristics within each time period and demand type
+for (this_v in c(vv_liq, vv_char)){
+  print(this_v)
+  setnames(data, this_v, 'xx')
+  data = merge(data, data[, .(m = mean(xx, na.rm = T)), .(yyyymm,spec)], by = c("yyyymm","spec"))
+  data[, xx := xx - m]
+  data[, m := NULL]   
+  setnames(data, 'xx',  this_v)
+}
+rm(this_v)
+
+# fill zeros if needed (for these characteristics)
+data[is.na(data)] = 0
+char_list = c(vv_char, vv_liq)
+
+# regression equation
+ff0 = paste0(c(vv_char, vv_liq), collapse = '+')
+data[, ofi_absofi := ofi * abs(ofi)]
+data_bk = copy(data)
+
+# == Fama-MacBeth
+
+# takes 10 secs
+out_bk = data.table()
+for (this_spec in unique(data_bk[, spec])){
+  print(this_spec)
+  
+  tic()
+  data = copy(data_bk[spec == this_spec])
+  
+  # function to do Fama-MacBeth
+  p.get_one_fm = function(ff){
+    
+    p.get_one_period = function(this_ym){
+      ols = lm(paste0('ret ~ ofi + ofi_absofi + ', ff), data[yyyymm == this_ym])
+      ols_no_ofi = lm(paste0('ret ~ ', ff), data[yyyymm == this_ym])
+      out = data.table(yyyymm = this_ym, var = names(coef(ols)), coef = ols$coef, 
+                       r2 = var(ols$fitted.values)/var(ols$model$ret), 
+                       r2_no_ofi = var(ols_no_ofi$fitted.values)/var(ols_no_ofi$model$ret))
+      return(out)
+    }
+    
+    # first regress all together
+    nc = detectCores() - 2
+    out = rbindlist(mclapply(unique(data[, yyyymm]), p.get_one_period, mc.cores = nc)); gc()
+    
+    tt = unique(out[, .(yyyymm, r2, r2_no_ofi)])
+    tt = tt[, .(r2 = mean(r2), r2_no_ofi = mean(r2_no_ofi))]
+    
+    out = out[, list(coef = mean(coef, na.rm = T), 
+                     se = sd(coef, na.rm = T)/sqrt(sum(!is.na(coef)))), var]
+    out[, r2 := tt[, r2]]
+    out[, r2_no_ofi := tt[, r2_no_ofi]]; rm(tt)
+    out[, obs := nrow(data)]
+    # out[, idx := idx]
+    return(out)
+  }
+  
+  out = p.get_one_fm(ff0)
+  out[, spec := this_spec]
+  out_bk = rbind(out_bk, out)
+  toc()
+}
+
+# parse spec
+tmp = unique(out_bk[, .(spec)])
+tmp[, location := regexpr('-', spec)]
+tmp[, type := substr(spec, 1, location-1)]
+tmp[, stdev_lag := as.integer(substr(spec, location+1, nchar(spec)))]
+tmp[, location := NULL]
+out_bk = merge(out_bk, tmp, by = 'spec')[, spec := NULL]; rm(tmp)
+out_bk[, tstat := coef/se]
+
+dcast(out_bk[var == 'ofi_absofi'], type ~ stdev_lag, value.var = 'coef')
+dcast(out_bk[var == 'ofi_absofi'], type ~ stdev_lag, value.var = 'tstat')
+
+dir.create('tmp/price_impact/regression_contemp/', recursive = T, showWarnings = F)
+saveRDS(out_bk, 'tmp/price_impact/regression_contemp/full_sample_standardized_d.RDS')
+
+# === current: do the same using bins
+
+# takes 10 secs
+out_bk = data.table()
+for (this_spec in unique(data_bk[, spec])){
+  print(this_spec)
+  
+  tic()
+  data = copy(data_bk[spec == this_spec])
+  
+  # break into bins
+  data = merge(data, data[, .(ss = sd(ofi)), yyyymm], by = 'yyyymm')
+  data[, bin := 1]
+  data[abs(ofi) > ss, bin := 2]
+  data[abs(ofi) > 2*ss, bin := 3]
+  data[, ofi_bin1 := ifelse(bin == 1, ofi, 0)]
+  data[, ofi_bin2 := ifelse(bin == 2, ofi, 0)]
+  data[, ofi_bin3 := ifelse(bin == 3, ofi, 0)]
+  
+  # function to do Fama-MacBeth
+  p.get_one_fm = function(ff){
+    
+    p.get_one_period = function(this_ym){
+      ols = lm(paste0('ret ~ ofi_bin1 + ofi_bin2 + ofi_bin3 + ', ff), data[yyyymm == this_ym])
+      ols_no_ofi = lm(paste0('ret ~ ', ff), data[yyyymm == this_ym])
+      out = data.table(yyyymm = this_ym, var = names(coef(ols)), coef = ols$coef, 
+                       r2 = var(ols$fitted.values)/var(ols$model$ret), 
+                       r2_no_ofi = var(ols_no_ofi$fitted.values)/var(ols_no_ofi$model$ret),
+                       obs = nrow(data[yyyymm == this_ym]))
+      return(out)
+    }
+    
+    # first regress all together
+    nc = detectCores() - 2
+    tmp = rbindlist(mclapply(unique(data[, yyyymm]), p.get_one_period, mc.cores = nc))[var %in% paste0('ofi_bin', 1:3)]; gc()
+    
+    cc = as.matrix(tmp[, mean(coef), var][, V1])
+    C = cov(cast(tmp[, list(yyyymm, var, coef)], yyyymm ~ var, value = 'coef')[, 2:4])/nrow(tmp)
+    
+    b_12 = matrix(c(-1,1,0))
+    b_23 = matrix(c(0,-1,1))
+    b_13 = matrix(c(-1,0,1))
+    
+    out = data.table(spec = this_spec, 
+                     r2 = mean(tmp[, r2]), 
+                     r2_no_ofi = mean(tmp[, r2_no_ofi]), 
+                     obs = unique(tmp[, .(yyyymm, obs)])[, sum(obs)], 
+                     var = c('M1','M2','M3','M2-M1','M3-M2','M3-M1'),
+                     coef = c(cc, 
+                              (t(b_12) %*% cc)[1],
+                              (t(b_23) %*% cc)[1], 
+                              (t(b_13) %*% cc)[1]),
+                     se = c(sqrt(diag(C)), 
+                            sqrt((t(b_12) %*% C %*% b_12)[1]),
+                            sqrt((t(b_23) %*% C %*% b_23)[1]),
+                            sqrt((t(b_13) %*% C %*% b_13)[1])))
+    out[, tstat := coef/se]
+    return(out)
+  }
+  
+  
+  # # function to do Fama-MacBeth
+  # p.get_one_fm = function(ff){
+  #   
+  #   p.get_one_period = function(this_ym){
+  #     ols = lm(paste0('ret ~ ofi_bin1 + ofi_bin2 + ofi_bin3 + ', ff), data[yyyymm == this_ym])
+  #     ols_no_ofi = lm(paste0('ret ~ ', ff), data[yyyymm == this_ym])
+  #     out = data.table(yyyymm = this_ym, var = names(coef(ols)), coef = ols$coef, 
+  #                      r2 = var(ols$fitted.values)/var(ols$model$ret), 
+  #                      r2_no_ofi = var(ols_no_ofi$fitted.values)/var(ols_no_ofi$model$ret))
+  #     return(out)
+  #   }
+  #   
+  #   # first regress all together
+  #   nc = detectCores() - 2
+  #   out = rbindlist(mclapply(unique(data[, yyyymm]), p.get_one_period, mc.cores = nc)); gc()
+  #   
+  #   tt = unique(out[, .(yyyymm, r2, r2_no_ofi)])
+  #   tt = tt[, .(r2 = mean(r2), r2_no_ofi = mean(r2_no_ofi))]
+  #   
+  #   
+  #   
+  #   out = out[, list(coef = mean(coef, na.rm = T), 
+  #                    se = sd(coef, na.rm = T)/sqrt(sum(!is.na(coef)))), var]
+  #   out[, r2 := tt[, r2]]
+  #   out[, r2_no_ofi := tt[, r2_no_ofi]]; rm(tt)
+  #   out[, obs := nrow(data)]
+  #   # out[, idx := idx]
+  #   return(out)
+  # }
+  # 
+  out = p.get_one_fm(ff0)
+  out_bk = rbind(out_bk, out)
+  toc()
+}
+
+# parse spec
+tmp = unique(out_bk[, .(spec)])
+tmp[, location := regexpr('-', spec)]
+tmp[, type := substr(spec, 1, location-1)]
+tmp[, stdev_lag := as.integer(substr(spec, location+1, nchar(spec)))]
+tmp[, location := NULL]
+out_bk = merge(out_bk, tmp, by = 'spec')[, spec := NULL]; rm(tmp)
+
+dir.create('tmp/price_impact/regression_contemp/', recursive = T, showWarnings = F)
+saveRDS(out_bk, 'tmp/price_impact/regression_contemp/full_sample_standardized_d_by_stdev_bin.RDS')
+
+
+```
+
+====== archived
+
+DISCARDED CODE. It plots the price impact by FIT and OFI bin. 
+Partially due to winsorizing FIT, the results do not look as nice in the tails, so we switched to regressions. 
+That said, I think it still looks nice and would love to put something like this into the appendix. 
+
+```{r}
+# source('runmefirst.R')
+library(sandwich)
+
+# both OFI and FIT
+data = j.read('tmp/raw_data/quarterly_table.RDS')
+
+# add characteristics (remember to lag)
+tmp = readRDS('../../data/stocks/controls/monthly_characteristics_not_lagged.RDS')
+tt = unique(tmp[, list(yyyymm)])
+tt[, mm := yyyymm - 100*floor(yyyymm/100)]
+tt = tt[mm %in% c(3,6,9,12)]
+tt = tt[, list(yyyymm, yyyymm_next = ifelse(mm == 12, yyyymm + 100 - 9, yyyymm + 3))]
+tmp = merge(tmp, tt, by = 'yyyymm'); rm(tt)
+tmp[, yyyymm := yyyymm_next][, yyyymm_next := NULL]
+vv_char = setdiff(names(tmp), c('yyyymm','permno'))
+data = merge(data, tmp, by = c('yyyymm','permno'), all.x = T); rm(tmp)
+
+# industry classifications
+tmp = readRDS('../../data/stocks/controls/ff12_industries_zero_mean.RDS')
+tmp = tmp[yyyymm %in% unique(data[, yyyymm])]
+vv_ind = setdiff(names(tmp), c('yyyymm','permno'))
+data = merge(data, tmp, by = c('yyyymm','permno'), all.x = T); rm(tmp)
+data[, xx := rnorm(nrow(data))]
+# data_bk = copy(data)
+
+# = sort within firm size buckets
+data[, bin_size := 1]
+n = 20
+for (i in 1:(n-1)){
+  data = merge(data, data[, list(cut = quantile(me_1, i/20)), list(yyyymm, var)], by = c('yyyymm','var'))
+  data[me_1 > cut, bin_size := i+1]
+  data[, cut := NULL]
+}
+
+data[, bin := 1]
+n = 20
+for (i in 1:(n-1)){
+  print(i/n)
+  data = merge(data, data[, list(cut = quantile(ofi, i/n)), list(yyyymm, var, bin_size)], by = c('yyyymm','var','bin_size'))
+  
+  
+  data[ofi > cut, bin := i+1]
+  data[, c('cut') := NULL]
+}
+rm(i)
+
+# == panel regression
+
+# Okay, to make life simple, we will first residualize against all controls and then do everything together
+for (i in 1:n){
+  data[, xx := ifelse(bin == i, 1, 0)]
+  setnames(data, 'xx', paste0('bin',i))
+}
+
+# these are x and y variables. Need to be residualized
+vv = c('ret', paste0('bin',1:n))
+
+# controls
+vv_ctrl = c(vv_char, vv_ind)
+ff = paste0('xx ~ ', vv_ctrl[1])
+for (this_v in vv_ctrl[-1]){
+  ff = paste0(ff, ' + ', this_v)
+}
+ff = as.formula(paste0(ff, ' | yyyymm'))
+
+# go through them. took a bit of time
+for (this_v in vv){
+  print(this_v)
+  setnames(data, this_v, 'xx')
+  for (this_var in unique(data[, var])){
+    ols = feols(ff, data[var == this_var])
+    data[var == this_var, xx := ols$residuals]
+  }
+  setnames(data, 'xx', this_v)
+}
+rm(vv, this_v, vv_char, vv_ind, i)
+data_bk = copy(data); gc()
+
+# now let's do the real thing
+ff = 'ret ~ 0'
+for (i in 1:n){
+  ff = paste0(ff, ' + bin', i)
+}
+
+ff = as.formula(ff)
+out = data.table()
+for (this_var in unique(data[, var])){
+  ols = feols(ff, data[var == this_var], cluster = c('yyyymm','permno'))
+  out = rbind(out, data.table(bin = 1:n, var = this_var, 
+                              ofi = data[var == this_var, mean(ofi), bin][order(bin)][, V1],
+                              coef = coef(ols), se = sqrt(diag(vcov(ols)))))
+}
+rm(this_var)
+
+ggplot(out, aes(x = ofi, y = coef, fill = var)) + geom_line(aes(color = var))
+
+# slightly rescale so it approximately passes through 0
+for (this_var in unique(out[, var])){
+  
+}
+
+this_bin = out[ofi < 0, max(bin)]
+m = out[bin %in% c(this_bin + c(0,1)), mean(coef)]
+out[, coef := coef - m]
+rm(this_bin, m)
+
+tt = readRDS('tmp/price_impact/price_impact_curve_fm.RDS')
+plot(tt[type == 'OFI', .(demand, coef)])
+
+saveRDS(out, 'tmp/price_impact/price_impact_curve_panel.RDS')
+# 
+# === plot
+# source('runmefirst.R')
+
+out = j.read('tmp/price_impact/price_impact_curve_panel.RDS')
+
+pp = ggplot(out, aes(x = ofi, y = coef)) + geom_line(lwd = 1) +
+  geom_ribbon(aes(ymin = coef-2*se, ymax = coef+2*se), alpha = .2) + theme_classic() +
+  labs(x = 'Demand (OFI)', y = 'Return') +
+  scale_x_continuous(labels = scales::percent_format(1)) +
+  scale_y_continuous(labels = scales::percent_format(1)) +
+  theme(text = element_text(size = 40))
+# ggsave('figs/price_impact/s_curve_panel.png', pp, 'png', w = 6, h = 4.5)
+
+
+# Save using ggsave instead of png/dev.off
+ggsave(
+  filename = paste("figs/price_impact/s_curve_panel_quarterly.png", sep = ''),
+  plot = pp,
+  width = 14,
+  height = 10,
+  units = "in",
+  dpi = 300
+)
+
+
+```
+
+plot to plot returns against demand shocks by bin. 
+Can do various versions. 
+Hmm, really not that clear... 
+
+```{r}
+# source('runmefirst.R')
+
+# all data
+data = j.read('tmp/raw_data/reg_inputs/all_ofi_and_ret.RDS')
+data = data[type != 'OFI']
+data = data[yyyymm >= 199306]
+
+# add BMI characteristics
+tmp = readRDS('tmp/raw_data/controls/controls_for_BMI.RDS')
+vv_bmi = setdiff(names(tmp), c('yyyymm','permno'))
+data = merge(data, tmp, by = c('yyyymm','permno'), all.x = T)
+
+# add characteristics
+tmp = readRDS('tmp/raw_data/controls/quarterly_controls_lagged.RDS')
+tt = readRDS('tmp/raw_data/controls/controls_classification.RDS')
+vv_char = tt[control_type == 'return-predictor', var]
+vv_liq = tt[control_type == 'liquidity', var]; rm(tt)
+tmp = tmp[, c('yyyymm','permno',vv_char,vv_liq), with = F]
+data = merge(data, tmp, by = c('yyyymm','permno'), all.x = T); rm(tmp)
+data[is.na(data)] = 0
+data_bk = copy(data)
+
+# = regress out the effect of chars
+data_list = split(data_bk, by = c('yyyymm','type'))
+
+p.get_one = function(subdata){
+  ff_controls = paste0(c(vv_char, vv_liq), collapse = '+')
+  if (subdata[1, type] == 'BMI'){
+    ff_controls = paste0(ff_controls, '+', paste0(vv_bmi, collapse = '+'))
+  }
+  mm_ret = lm(paste0('ret ~ ', ff_controls), subdata)
+  mm_ofi = lm(paste0('ofi ~ ', ff_controls), subdata)
+  
+  subdata = subdata[, .(yyyymm, permno, type, ret, ofi, 
+                        ret_resid = mm_ret$residuals, 
+                        ofi_resid = mm_ofi$residuals)]
+  return(subdata)
+}
+
+tic()
+data_bk = rbindlist(mclapply(data_list, p.get_one, mc.cores = nc)); gc()
+toc()
+
+# = now let's plot
+
+data = copy(data_bk)
+data[ofi_resid > 0, bin_ofi := ntile(ofi_resid, ifelse(type == 'BMI', 5, 20)), .(yyyymm, type)]
+data[ofi_resid <= 0, bin_ofi := ntile(ofi_resid, ifelse(type == 'BMI', 5, 20)) - ifelse(type == 'BMI', 6, 21), .(yyyymm, type)]
+
+# Let's plot
+out = data[, .(ofi_resid = mean(ofi_resid), ret_resid = mean(ret_resid)), .(type, bin_ofi)]
+ggplot(out, aes(x = ofi_resid, y = ret_resid, fill = type)) + geom_line(aes(color = type), lwd = 1)
+
+this_type = 'OFI_resid'
+this_type = 'FIT'
+this_type = 'BMI'
+ggplot(out[type == this_type], aes(x = ofi_resid, y = ret_resid)) + geom_line(lwd = 1) + 
+  geom_point()
+
+ggplot(out[type == this_type], aes(x = ofi_resid, y = ret_resid)) + geom_line(lwd = 1) + 
+  geom_point()
+
+
+
+# = sort within firm size buckets
+data[, bin_size := 1]
+n = 20
+for (i in 1:(n-1)){
+  data = merge(data, data[, list(cut = quantile(me_1, i/20)), list(yyyymm, var)], by = c('yyyymm','var'))
+  data[me_1 > cut, bin_size := i+1]
+  data[, cut := NULL]
+}
+
+data[, bin := 1]
+n = 20
+for (i in 1:(n-1)){
+  print(i/n)
+  data = merge(data, data[, list(cut = quantile(ofi, i/n)), list(yyyymm, var, bin_size)], by = c('yyyymm','var','bin_size'))
+  
+  
+  data[ofi > cut, bin := i+1]
+  data[, c('cut') := NULL]
+}
+rm(i)
+
+# == panel regression
+
+# Okay, to make life simple, we will first residualize against all controls and then do everything together
+for (i in 1:n){
+  data[, xx := ifelse(bin == i, 1, 0)]
+  setnames(data, 'xx', paste0('bin',i))
+}
+
+# these are x and y variables. Need to be residualized
+vv = c('ret', paste0('bin',1:n))
+
+# controls
+vv_ctrl = c(vv_char, vv_ind)
+ff = paste0('xx ~ ', vv_ctrl[1])
+for (this_v in vv_ctrl[-1]){
+  ff = paste0(ff, ' + ', this_v)
+}
+ff = as.formula(paste0(ff, ' | yyyymm'))
+
+# go through them. took a bit of time
+for (this_v in vv){
+  print(this_v)
+  setnames(data, this_v, 'xx')
+  for (this_var in unique(data[, var])){
+    ols = feols(ff, data[var == this_var])
+    data[var == this_var, xx := ols$residuals]
+  }
+  setnames(data, 'xx', this_v)
+}
+rm(vv, this_v, vv_char, vv_ind, i)
+data_bk = copy(data); gc()
+
+# now let's do the real thing
+ff = 'ret ~ 0'
+for (i in 1:n){
+  ff = paste0(ff, ' + bin', i)
+}
+
+ff = as.formula(ff)
+out = data.table()
+for (this_var in unique(data[, var])){
+  ols = feols(ff, data[var == this_var], cluster = c('yyyymm','permno'))
+  out = rbind(out, data.table(bin = 1:n, var = this_var, 
+                              ofi = data[var == this_var, mean(ofi), bin][order(bin)][, V1],
+                              coef = coef(ols), se = sqrt(diag(vcov(ols)))))
+}
+rm(this_var)
+
+ggplot(out, aes(x = ofi, y = coef, fill = var)) + geom_line(aes(color = var))
+
+# slightly rescale so it approximately passes through 0
+for (this_var in unique(out[, var])){
+  
+}
+
+this_bin = out[ofi < 0, max(bin)]
+m = out[bin %in% c(this_bin + c(0,1)), mean(coef)]
+out[, coef := coef - m]
+rm(this_bin, m)
+
+tt = readRDS('tmp/price_impact/price_impact_curve_fm.RDS')
+plot(tt[type == 'OFI', .(demand, coef)])
+
+saveRDS(out, 'tmp/price_impact/price_impact_curve_panel.RDS')
+# 
+# === plot
+# source('runmefirst.R')
+
+out = j.read('tmp/price_impact/price_impact_curve_panel.RDS')
+
+pp = ggplot(out, aes(x = ofi, y = coef)) + geom_line(lwd = 1) +
+  geom_ribbon(aes(ymin = coef-2*se, ymax = coef+2*se), alpha = .2) + theme_classic() +
+  labs(x = 'Demand (OFI)', y = 'Return') +
+  scale_x_continuous(labels = scales::percent_format(1)) +
+  scale_y_continuous(labels = scales::percent_format(1)) +
+  theme(text = element_text(size = 40))
+# ggsave('figs/price_impact/s_curve_panel.png', pp, 'png', w = 6, h = 4.5)
+
+
+# Save using ggsave instead of png/dev.off
+ggsave(
+  filename = paste("figs/price_impact/s_curve_panel_quarterly.png", sep = ''),
+  plot = pp,
+  width = 14,
+  height = 10,
+  units = "in",
+  dpi = 300
+)
+
+
+```
+
