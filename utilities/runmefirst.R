@@ -1,11 +1,13 @@
-# library(arrow)
 rm(list = ls())
+gc()
+
+# load libraries
 library(dplyr)
+library(tidyr)
 library(fixest)
 library(ggplot2)
 library(parallel)
 library(DescTools)
-# library(reshape2)
 library(tictoc)
 library(haven)
 library(rstudioapi)
@@ -15,4 +17,9 @@ library(sandwich)
 library(styler)
 showtext_auto()
 library(data.table)
+
+# num of cores
 nc <- detectCores() - 2
+
+# library(arrow)
+# library(reshape2)

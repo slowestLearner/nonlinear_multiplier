@@ -1,6 +1,6 @@
 # Contemporaneous regression of returns on demand: panel regressions
 source("utilities/runmefirst.R")
-
+source("utilities/regressions.R")
 
 # load regression data
 data_all <- readRDS("tmp/raw_data/reg_inputs/reg_table_static.RDS")
@@ -18,49 +18,6 @@ controls_bmi <- setdiff(names(tmp), c("yyyymm", "permno"))
 rm(tmp)
 
 
-# ###########################################################
-# Utility Functions ---- TODO: move to separate file
-# ###########################################################
-
-# utility function: panel regression
-p.panel_regression <- function(data, ff, compare_coefs = FALSE) {
-  ols <- feols(as.formula(paste0(ff, " | yyyymm")), data, cluster = c("yyyymm", "permno"))
-  out <- data.table(
-    var = names(coef(ols)),
-    coef = coef(ols),
-    se = sqrt(diag(vcov(ols))),
-    obs = ols$nobs, r2 = r2(ols)["ar2"]
-  )
-
-  # also report coef differences
-  if (compare_coefs == TRUE) {
-    var_indices <- names(coef(ols)) %in% paste0("ofi_bin", 1:3)
-
-    cc <- matrix(coef(ols)[var_indices])
-    C <- vcov(ols)[var_indices, var_indices]
-
-    b_12 <- matrix(c(-1, 1, 0))
-    b_23 <- matrix(c(0, -1, 1))
-    b_13 <- matrix(c(-1, 0, 1))
-
-    out <- rbind(out, data.table(
-      var = c("ofi_bin2 - ofi_bin1", "ofi_bin3 - ofi_bin2", "ofi_bi3 - ofi_bin1"),
-      coef = c(
-        (t(b_12) %*% cc)[1],
-        (t(b_23) %*% cc)[1],
-        (t(b_13) %*% cc)[1]
-      ),
-      se = c(
-        sqrt((t(b_12) %*% C %*% b_12)[1]),
-        sqrt((t(b_23) %*% C %*% b_23)[1]),
-        sqrt((t(b_13) %*% C %*% b_13)[1])
-      ),
-      obs = ols$nobs, r2 = r2(ols)["ar2"]
-    ))
-  }
-
-  return(out)
-}
 
 
 # ###########################################################
