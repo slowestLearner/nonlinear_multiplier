@@ -1,5 +1,6 @@
-# Contemporaneous regression of returns on demand
+# Contemporaneous regression of returns on demand: panel regressions
 source("utilities/runmefirst.R")
+
 
 # load regression data
 data_all <- readRDS("tmp/raw_data/reg_inputs/reg_table_static.RDS")
@@ -16,75 +17,54 @@ tmp <- readRDS("tmp/raw_data/controls/controls_for_BMI.RDS")
 controls_bmi <- setdiff(names(tmp), c("yyyymm", "permno"))
 rm(tmp)
 
+
 # ###########################################################
 # Utility Functions ---- TODO: move to separate file
 # ###########################################################
 
-# function to estimate Fama-MacBeth regression
-p.fama_macbeth <- function(data, ff, compare_coefs = FALSE) {
-  # regression for one period
-  p.get_one_period <- function(this_ym) {
-    ols <- lm(ff, data[yyyymm == this_ym])
-    # Get the dependent variable name dynamically
-    dep_var_name <- all.vars(as.formula(ff))[1]
-    return(data.table(
-      yyyymm = this_ym, var = names(coef(ols)), coef = ols$coef,
-      r2 = var(ols$fitted.values) / var(ols$model[[dep_var_name]])
-    ))
-  }
+# utility function: panel regression
+p.panel_regression <- function(data, ff, compare_coefs = FALSE) {
+  ols <- feols(as.formula(paste0(ff, " | yyyymm")), data, cluster = c("yyyymm", "permno"))
+  out <- data.table(
+    var = names(coef(ols)),
+    coef = coef(ols),
+    se = sqrt(diag(vcov(ols))),
+    obs = ols$nobs, r2 = r2(ols)["ar2"]
+  )
 
-  # regression by period
-  out <- rbindlist(lapply(unique(data[, yyyymm]), p.get_one_period))
+  # also report coef differences
+  if (compare_coefs == TRUE) {
+    var_indices <- names(coef(ols)) %in% paste0("ofi_bin", 1:3)
 
-  # extract R2
-  r2_data <- unique(out[, .(yyyymm, r2)])[, .(r2 = mean(r2))]
-  out[, r2 := NULL]
+    cc <- matrix(coef(ols)[var_indices])
+    C <- vcov(ols)[var_indices, var_indices]
 
-  # let's do Newey-West
-  yms <- out[var == first(var), yyyymm]
+    b_12 <- matrix(c(-1, 1, 0))
+    b_23 <- matrix(c(0, -1, 1))
+    b_13 <- matrix(c(-1, 0, 1))
 
-  # compare coefficient differences
-  if (compare_coefs) {
     out <- rbind(out, data.table(
-      yyyymm = yms, var = "ofi_bin2 - ofi_bin1",
-      coef = out[var == "ofi_bin2", coef] - out[var == "ofi_bin1", coef]
-    ))
-    out <- rbind(out, data.table(
-      yyyymm = yms, var = "ofi_bin3 - ofi_bin1",
-      coef = out[var == "ofi_bin3", coef] - out[var == "ofi_bin1", coef]
-    ))
-    out <- rbind(out, data.table(
-      yyyymm = yms, var = "ofi_bin3 - ofi_bin2",
-      coef = out[var == "ofi_bin3", coef] - out[var == "ofi_bin2", coef]
+      var = c("ofi_bin2 - ofi_bin1", "ofi_bin3 - ofi_bin2", "ofi_bi3 - ofi_bin1"),
+      coef = c(
+        (t(b_12) %*% cc)[1],
+        (t(b_23) %*% cc)[1],
+        (t(b_13) %*% cc)[1]
+      ),
+      se = c(
+        sqrt((t(b_12) %*% C %*% b_12)[1]),
+        sqrt((t(b_23) %*% C %*% b_23)[1]),
+        sqrt((t(b_13) %*% C %*% b_13)[1])
+      ),
+      obs = ols$nobs, r2 = r2(ols)["ar2"]
     ))
   }
 
-  # newey-west lag
-  if ("hor" %in% names(data)) {
-    this_hor <- data[1, hor]
-  } else {
-    this_hor <- 1
-  }
-
-  coef_data <- data.table()
-  for (this_var in unique(out[, var])) {
-    mm <- lm(coef ~ 1, out[var == this_var])
-    coef_data <- rbind(coef_data, data.table(
-      var = this_var, coef = mm$coef[1],
-      se = sqrt(vcov(mm))[1, 1],
-      se_nw = sqrt(NeweyWest(mm, this_hor)[1, 1])
-    ))
-  }
-  coef_data[, r2 := r2_data[, r2]]
-  coef_data[, obs := nrow(data)]
-  coef_data[, type := data[1, type]]
-  coef_data[, nw_lag := this_hor]
-  return(coef_data)
+  return(out)
 }
 
 
 # ###########################################################
-# Fama-MacBeth with nonlinear or stdev-based specification
+# Estimation, with nonlinear or stdev-based specification
 # ###########################################################
 
 # control variables for different specifications
@@ -110,7 +90,7 @@ p.process_one_type <- function(data, reg_spec = "nonlinear") {
     if (this_type == "BMI") {
       ff <- paste0(ff, "+", paste0(controls_bmi, collapse = "+"))
     }
-    out <- p.fama_macbeth(data, ff, compare_coefs = ifelse(reg_spec == "nonlinear", FALSE, TRUE))
+    out <- p.panel_regression(data, ff, compare_coefs = ifelse(reg_spec == "nonlinear", FALSE, TRUE))
     out[, spec_idx := spec_idx]
     out_all <- rbind(out_all, out)
   }
@@ -123,7 +103,7 @@ p.process_one_type <- function(data, reg_spec = "nonlinear") {
     ff <- paste0(ff, " + ofi_", this_v)
     spec_idx <- spec_idx + 1
 
-    out <- p.fama_macbeth(data, ff, compare_coefs = ifelse(reg_spec == "nonlinear", FALSE, TRUE))
+    out <- p.panel_regression(data, ff, compare_coefs = ifelse(reg_spec == "nonlinear", FALSE, TRUE))
     out[, spec_idx := spec_idx]
     out_all <- rbind(out_all, out)
   }
@@ -151,7 +131,7 @@ out_nonlinear <- rbindlist(mclapply(split(data_all, by = "type"), function(x) {
 toc()
 
 dir.create("tmp/price_impact/regression_contemp/", recursive = T, showWarnings = F)
-saveRDS(out_nonlinear, "tmp/price_impact/regression_contemp/fm_nonlinear.RDS")
+saveRDS(out_nonlinear, "tmp/price_impact/regression_contemp/panel_nonlinear.RDS")
 
 # stdev-based specification---
 tic()
@@ -161,55 +141,38 @@ out_stdev <- rbindlist(mclapply(split(data_all, by = "type"), function(x) {
 toc()
 
 dir.create("tmp/price_impact/regression_contemp/", recursive = T, showWarnings = F)
-saveRDS(out_stdev, "tmp/price_impact/regression_contemp/fm_stdev.RDS")
+saveRDS(out_stdev, "tmp/price_impact/regression_contemp/panel_stdev.RDS")
 
 
 # # === SANITY check
 
+
 # # --- nonlinear
-# new <- readRDS("tmp/price_impact/regression_contemp/fm_nonlinear.RDS")
-# old <- readRDS("../20250117_quarterly/tmp/price_impact/regression_contemp/full_sample.RDS")
+# new <- readRDS("tmp/price_impact/regression_contemp/panel_nonlinear.RDS")
+# old <- readRDS("../20250117_quarterly/tmp/price_impact/regression_contemp/full_sample_panel.RDS")
 # old <- old[type != "OFI"]
 # old[type == "OFI_resid", type := "OFI"]
-# setnames(old, "idx", "spec_idx")
 
-# # get joint variables
+# # get overlapping part
+# new <- new[spec_idx %in% 1:3]
 # vv <- intersect(names(new), names(old))
 # new <- new[, ..vv]
 # old <- old[, ..vv]
 # rm(vv)
+# stopifnot(dim(new) == dim(old))
+
+# # convert coef units
+# old[var == "ofi_absofi", coef := coef * 100]
+# old[var == "ofi_absofi", se := se * 100]
 
 # # compare
 # compare <- merge(new, old, by = c("type", "var", "spec_idx"), all = T)
+# stopifnot(nrow(compare) == nrow(new))
 # rm(new, old)
+
 # compare[, cor(coef.x, coef.y)]
 # compare[, cor(se.x, se.y)]
 # compare[, cor(obs.x, obs.y)]
 # compare[, cor(r2.x, r2.y)]
 
-# # --- stdev
-# new <- readRDS("tmp/price_impact/regression_contemp/fm_stdev.RDS")
-# old <- readRDS("../20250117_quarterly/tmp/price_impact/multiplier_by_shock_size_quarterly/fm_by_stdev_based_bins.RDS")
-# old <- old[type != "OFI"]
-# old[type == "OFI_resid", type := "OFI"]
-# setnames(old, "idx", "spec_idx")
-
-# # get joint variables
-# vv <- intersect(names(new), names(old))
-# new <- new[, ..vv]
-# old <- old[, ..vv]
-# rm(vv)
-
-# # rename variables to compare
-# new <- new[grepl("ofi_bin", var)]
-# new[, var := gsub("ofi_bin", "M", var)]
-# new[, var := gsub(" ", "", var)]
-# stopifnot(nrow(new) == nrow(old))
-
-# # compare
-# compare <- merge(new, old, by = c("type", "var", "spec_idx"), all = T)
-# rm(new, old)
-# compare[, cor(coef.x, coef.y)]
-# compare[, cor(se.x, se.y)]
-# compare[, cor(obs.x, obs.y)]
-# compare[, cor(r2.x, r2.y)]
+# tt = readRDS('../20250117_quarterly/tmp/price_impact/archive/multiplier_by_shock_size_quarterly/panel.RDS')

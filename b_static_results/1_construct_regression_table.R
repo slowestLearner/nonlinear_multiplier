@@ -32,8 +32,6 @@ for (this_v in c(controls_liq, controls_char)) {
   print(paste0("recentering control = ", this_v))
   setnames(data, this_v, "xx")
   data[, xx := xx - mean(xx, na.rm = T), .(yyyymm, type)]
-  #   data = merge(data, data[, .(m = mean(xx, na.rm = T)), .(yyyymm,type)], by = c("yyyymm","type"))
-  #   data[, xx := xx - m][, m := NULL]
   setnames(data, "xx", this_v)
 }
 rm(this_v)
