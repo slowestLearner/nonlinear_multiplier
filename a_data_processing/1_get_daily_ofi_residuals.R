@@ -1,10 +1,7 @@
 # === get the unexpected components of OFI in daily data
 
 # load libraries
-rm(list = ls())
-library(data.table)
-library(parallel)
-library(tictoc)
+source('utilities/runmefirst.R')
 
 # daily OFI data
 data = readRDS('../../data/demand_shocks/ofi/daily.RDS')

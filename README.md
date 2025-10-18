@@ -20,6 +20,10 @@ If you use data or code based on our work, please cite the paper:
 
 TODO: fill in details later
 
+TODO later
+1. OFI needs to be filled to 2023 (start from direct download from WRDS)
+2. 
+
 
 ----
 

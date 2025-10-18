@@ -1,13 +1,7 @@
 # === Put together the monthly/quarterly data for main regressions
 
 # load libraries
-rm(list = ls())
-library(data.table)
-library(parallel)
-library(tictoc)
-library(haven)
-library(dplyr)
-library(DescTools)
+source('utilities/runmefirst.R')
 
 # == 1) Put together quarterly OFI/FIT and return data. 
 
@@ -83,18 +77,18 @@ data = data[, c('yyyymm','permno',PS_controls), with = F]
 dir.create('tmp/raw_data/controls/', recursive = T, showWarnings = F)
 saveRDS(data, 'tmp/raw_data/controls/controls_for_BMI.RDS')
 
-# === SANITY: check with earlier data
+# # === SANITY: check with earlier data
 
-# BMI controls
-old = readRDS('../20250117_quarterly/tmp/raw_data/controls/controls_for_BMI.RDS')
-new = readRDS('tmp/raw_data/controls/controls_for_bmi.RDS')
-mean(old == new, na.rm = T)
+# # BMI controls
+# old = readRDS('../20250117_quarterly/tmp/raw_data/controls/controls_for_BMI.RDS')
+# new = readRDS('tmp/raw_data/controls/controls_for_bmi.RDS')
+# mean(old == new, na.rm = T)
 
-# demand data
-old = readRDS('../20250117_quarterly/tmp/raw_data/reg_inputs/all_ofi_and_ret.RDS')
-old = old[type != 'OFI']
-old[type == 'OFI_resid', type := 'OFI']
-new = readRDS('tmp/raw_data/reg_inputs/all_ofi_and_ret.RDS')
-dim(new) == dim(old)
-compare = merge(old, new, by = c('yyyymm','permno','type')); rm(old,new)
-compare[, cor(ofi.x, ofi.y), type]
+# # demand data
+# old = readRDS('../20250117_quarterly/tmp/raw_data/reg_inputs/all_ofi_and_ret.RDS')
+# old = old[type != 'OFI']
+# old[type == 'OFI_resid', type := 'OFI']
+# new = readRDS('tmp/raw_data/reg_inputs/all_ofi_and_ret.RDS')
+# dim(new) == dim(old)
+# compare = merge(old, new, by = c('yyyymm','permno','type')); rm(old,new)
+# compare[, cor(ofi.x, ofi.y), type]
