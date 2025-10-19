@@ -3,6 +3,7 @@ source("utilities/runmefirst.R")
 source("utilities/regressions.R")
 
 # load regression data
+tic("loading data")
 data_all <- readRDS("tmp/raw_data/reg_inputs/reg_table_static.RDS")
 
 # get control variable names
@@ -16,8 +17,6 @@ rm(cdata)
 tmp <- readRDS("tmp/raw_data/controls/controls_for_BMI.RDS")
 controls_bmi <- setdiff(names(tmp), c("yyyymm", "permno"))
 rm(tmp)
-
-
 
 
 # ###########################################################
@@ -39,6 +38,8 @@ p.process_one_type <- function(data, reg_spec = "nonlinear") {
 
   # introduce direct controls
   for (spec_idx in 1:length(control_formulas)) {
+    # print(paste0("this_type = ", this_type, " spec_idx = ", spec_idx))
+    ff_no_ofi <- paste0("ret ~ ", control_formulas[spec_idx])
     if (reg_spec == "nonlinear") {
       ff <- paste0("ret ~ ", control_formulas[spec_idx], " + ofi + ofi_absofi")
     } else if (reg_spec == "stdev") {
@@ -46,8 +47,11 @@ p.process_one_type <- function(data, reg_spec = "nonlinear") {
     }
     if (this_type == "BMI") {
       ff <- paste0(ff, "+", paste0(controls_bmi, collapse = "+"))
+      ff_no_ofi <- paste0(ff_no_ofi, "+", paste0(controls_bmi, collapse = "+"))
     }
     out <- p.panel_regression(data, ff, compare_coefs = ifelse(reg_spec == "nonlinear", FALSE, TRUE))
+    out_no_ofi <- p.panel_regression(data, ff_no_ofi, compare_coefs = FALSE)
+    out[, r2_no_ofi := out_no_ofi[1, r2]]
     out[, spec_idx := spec_idx]
     out_all <- rbind(out_all, out)
   }
@@ -58,19 +62,23 @@ p.process_one_type <- function(data, reg_spec = "nonlinear") {
     data[, yy := xx * ofi]
     setnames(data, c("xx", "yy"), c(this_v, paste0("ofi_", this_v)))
     ff <- paste0(ff, " + ofi_", this_v)
+    ff_no_ofi <- paste0(ff_no_ofi, " + ofi_", this_v)
     spec_idx <- spec_idx + 1
+    # print(paste0("this_type = ", this_type, " spec_idx = ", spec_idx))
 
     out <- p.panel_regression(data, ff, compare_coefs = ifelse(reg_spec == "nonlinear", FALSE, TRUE))
+    out_no_ofi <- p.panel_regression(data, ff_no_ofi, compare_coefs = FALSE)
+    out[, r2_no_ofi := out_no_ofi[1, r2]]
     out[, spec_idx := spec_idx]
     out_all <- rbind(out_all, out)
   }
 
   # name the control variables being added
   tmp <- data.table(
-    spec_idx = 1:(length(controls_list) + 4),
-    var_added = c("none_init", "controls_char", "controls_char+controls_liq", "none", controls_list),
+    spec_idx = 1:(length(controls_list) + 3),
+    var_added = c("none_init", "controls_char", "controls_char+controls_liq", controls_list),
     var_type = c(
-      rep("", 4), rep("return-predicting chars", length(controls_char)),
+      rep("", 3), rep("return-predicting chars", length(controls_char)),
       rep("liquidity", length(controls_liq))
     )
   )
@@ -79,9 +87,10 @@ p.process_one_type <- function(data, reg_spec = "nonlinear") {
 
   return(out_all)
 }
+toc()
 
 # nonlinear specification---
-tic()
+tic("static panel: nonlinear")
 out_nonlinear <- rbindlist(mclapply(split(data_all, by = "type"), function(x) {
   p.process_one_type(x, reg_spec = "nonlinear")
 }, mc.cores = nc))
@@ -91,7 +100,7 @@ dir.create("tmp/price_impact/regression_contemp/", recursive = T, showWarnings =
 saveRDS(out_nonlinear, "tmp/price_impact/regression_contemp/panel_nonlinear.RDS")
 
 # stdev-based specification---
-tic()
+tic("static panel: stdev")
 out_stdev <- rbindlist(mclapply(split(data_all, by = "type"), function(x) {
   p.process_one_type(x, reg_spec = "stdev")
 }, mc.cores = nc))
@@ -100,37 +109,36 @@ toc()
 dir.create("tmp/price_impact/regression_contemp/", recursive = T, showWarnings = F)
 saveRDS(out_stdev, "tmp/price_impact/regression_contemp/panel_stdev.RDS")
 
-
 # # === SANITY check
 
-
-# --- nonlinear (have small differences)
-new <- readRDS("tmp/price_impact/regression_contemp/panel_nonlinear.RDS")
-old <- readRDS("../20250117_quarterly/tmp/price_impact/regression_contemp/full_sample_panel.RDS")
-old <- old[type != "OFI"]
-old[type == "OFI_resid", type := "OFI"]
-
-# get overlapping part
-new <- new[spec_idx %in% 1:3]
-vv <- intersect(names(new), names(old))
-new <- new[, ..vv]
-old <- old[, ..vv]
-rm(vv)
-stopifnot(dim(new) == dim(old))
-
-# convert coef units
-old[var == "ofi_absofi", coef := coef * 100]
-old[var == "ofi_absofi", se := se * 100]
-
-# compare
-compare <- merge(new, old, by = c("type", "var", "spec_idx"), all = T)
-stopifnot(nrow(compare) == nrow(new))
-rm(new, old)
-
-compare[, mean(abs(coef.x - coef.y)) / mean(abs(coef.x))]
-compare[, mean(abs(se.x - se.y)) / mean(abs(se.x))]
-compare[, mean(abs(obs.x - obs.y)) / mean(abs(obs.x))]
-compare[, mean(abs(r2.x - r2.y)) / mean(abs(r2.x))]
+# # --- nonlinear (small differences)
+# new <- readRDS("tmp/price_impact/regression_contemp/panel_nonlinear.RDS")
+# old <- readRDS("../20250117_quarterly/tmp/price_impact/regression_contemp/full_sample_panel.RDS")
+# old <- old[type != "OFI"]
+# old[type == "OFI_resid", type := "OFI"]
+#
+# # get overlapping part
+# new <- new[spec_idx %in% 1:3]
+# vv <- intersect(names(new), names(old))
+# new <- new[, ..vv]
+# old <- old[, ..vv]
+# rm(vv)
+# stopifnot(dim(new) == dim(old))
+#
+# # convert coef units
+# old[var == "ofi_absofi", coef := coef * 100]
+# old[var == "ofi_absofi", se := se * 100]
+#
+# # compare
+# compare <- merge(new, old, by = c("type", "var", "spec_idx"), all = T)
+# stopifnot(nrow(compare) == nrow(new))
+# rm(new, old)
+#
+# compare[, mean(abs(coef.x - coef.y)) / mean(abs(coef.x))]
+# compare[, mean(abs(se.x - se.y)) / mean(abs(se.x))]
+# compare[, mean(abs(obs.x - obs.y)) / mean(abs(obs.x))]
+# compare[, mean(abs(r2.x - r2.y)) / mean(abs(r2.x))]
+# compare[, mean(abs(r2_no_ofi.x - r2_no_ofi.y)) / mean(abs(r2_no_ofi.x))]
 
 
 # # --- stdev (no problem)
@@ -138,10 +146,10 @@ compare[, mean(abs(r2.x - r2.y)) / mean(abs(r2.x))]
 # old <- readRDS("../20250117_quarterly/tmp/price_impact/regression_contemp/full_sample_panel_with_stdev_bins.RDS")
 # old <- old[type != "OFI"]
 # old[type == "OFI_resid", type := "OFI"]
-
+#
 # # get overlapping part
 # new <- new[spec_idx %in% 1:3]
-
+#
 # # get joint variables
 # new[, var := gsub("ofi_bin", "M", var)]
 # new[, var := gsub(" ", "", var)]
@@ -149,19 +157,20 @@ compare[, mean(abs(r2.x - r2.y)) / mean(abs(r2.x))]
 # new <- new[var %in% common_vars]
 # old <- old[var %in% common_vars]
 # rm(common_vars)
-
+#
 # vv <- intersect(names(new), names(old))
 # new <- new[, ..vv]
 # old <- old[, ..vv]
 # rm(vv)
 # stopifnot(dim(new) == dim(old))
-
+#
 # # compare
 # compare <- merge(new, old, by = c("type", "var", "spec_idx"), all = T)
 # stopifnot(nrow(compare) == nrow(new))
 # rm(new, old)
-
+#
 # compare[, mean(abs(coef.x - coef.y)) / mean(abs(coef.x))]
 # compare[, mean(abs(se.x - se.y)) / mean(abs(se.x))]
 # compare[, mean(abs(obs.x - obs.y)) / mean(abs(obs.x))]
 # compare[, mean(abs(r2.x - r2.y)) / mean(abs(r2.x))]
+# compare[, mean(abs(r2_no_ofi.x - r2_no_ofi.y)) / mean(abs(r2_no_ofi.x))]

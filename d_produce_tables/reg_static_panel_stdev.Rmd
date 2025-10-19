@@ -24,12 +24,12 @@ library(dplyr)
 library(tidyr)
 library(scales)
 library(xtable)
-library(stringr) # For str_remove and strcat (if pracma is not used)
-library(reshape2) # For cast()
+library(stringr)
+library(reshape2)
 library(pracma)
 
 # === panel A, regression results
-data = readRDS('../tmp/price_impact/regression_contemp/fm_stdev.RDS')
+data = readRDS('../tmp/price_impact/regression_contemp/panel_stdev.RDS')
 
 # choose specification and variables
 data[, type_idx := ifelse(type == 'BMI', 1, ifelse(type == 'FIT', 2, 3))]
@@ -205,7 +205,7 @@ print(x.side, type = "latex",
                                     '\\hline \\multicolumn{10}{c}{Panel B: Coefficient differences} \\\\\n \\hline'
                         ,'\\hline \n'
                         ))
-      ,file = '../output/tables/reg_static_fm_stdev.tex'
+      ,file = '../output/tables/reg_static_panel_stdev.tex'
 )
 
 

@@ -93,10 +93,10 @@ p.process_one_type <- function(data, reg_spec = "nonlinear") {
 
   # name the control variables being added
   tmp <- data.table(
-    spec_idx = 1:(length(controls_list) + 4),
-    var_added = c("none_init", "controls_char", "controls_char+controls_liq", "none", controls_list),
+    spec_idx = 1:(length(controls_list) + 3),
+    var_added = c("none_init", "controls_char", "controls_char+controls_liq", controls_list),
     var_type = c(
-      rep("", 4), rep("return-predicting chars", length(controls_char)),
+      rep("", 3), rep("return-predicting chars", length(controls_char)),
       rep("liquidity", length(controls_liq))
     )
   )
@@ -107,7 +107,7 @@ p.process_one_type <- function(data, reg_spec = "nonlinear") {
 }
 
 # nonlinear---
-tic(paste0("Processing dynamic nonlinear specifications with nc = ", nc, " cores"))
+tic("dynamic fm: nonlinear")
 out_nonlinear <- rbindlist(mclapply(split(data_reg, by = "type"), function(x) {
   p.process_one_type(x, reg_spec = "nonlinear")
 }, mc.cores = nc))
@@ -122,7 +122,7 @@ saveRDS(out_nonlinear, "tmp/price_impact/regression_dynamic/fm_nonlinear.RDS")
 toc()
 
 # stdev-based specification---
-tic(paste0("Processing dynamic stdev-based specifications with nc = ", nc, " cores"))
+tic("dynamic fm: stdev")
 out_stdev <- rbindlist(mclapply(split(data_reg, by = "type"), function(x) {
   p.process_one_type(x, reg_spec = "stdev")
 }, mc.cores = nc))
@@ -181,48 +181,48 @@ toc()
 # compare[, mean(abs(cum_d_sd.x - cum_d_sd.y)) / mean(abs(cum_d_sd.x))]
 
 
-# --- stdev-based specification
-new <- readRDS("tmp/price_impact/regression_dynamic/fm_stdev.RDS")
-old <- readRDS("../20250117_quarterly/tmp/price_impact/regression_with_lagged_interaction/fm_quarterly_by_stdev_based_bins.RDS")
-old <- old[type != "OFI"]
-old[type == "OFI_resid", type := "OFI"]
+# # --- stdev-based specification
+# new <- readRDS("tmp/price_impact/regression_dynamic/fm_stdev.RDS")
+# old <- readRDS("../20250117_quarterly/tmp/price_impact/regression_with_lagged_interaction/fm_quarterly_by_stdev_based_bins.RDS")
+# old <- old[type != "OFI"]
+# old[type == "OFI_resid", type := "OFI"]
 
-# choose specification
-new <- new[spec_idx == 3][, spec_idx := NULL]
+# # choose specification
+# new <- new[spec_idx == 3][, spec_idx := NULL]
 
-# choose variables
-new[, var := gsub("ofi_bin", "M", var)]
-new[, var := gsub(" ", "", var)]
-common_vars <- intersect(unique(new[, var]), unique(old[, var]))
-new <- new[var %in% common_vars]
-old <- old[var %in% common_vars]
-rm(common_vars)
+# # choose variables
+# new[, var := gsub("ofi_bin", "M", var)]
+# new[, var := gsub(" ", "", var)]
+# common_vars <- intersect(unique(new[, var]), unique(old[, var]))
+# new <- new[var %in% common_vars]
+# old <- old[var %in% common_vars]
+# rm(common_vars)
 
-# get joint variables
-old[, type := paste0(type, "_", lag, "lag")]
-vv <- intersect(names(new), names(old))
-new <- new[, ..vv]
-old <- old[, ..vv]
-rm(vv)
+# # get joint variables
+# old[, type := paste0(type, "_", lag, "lag")]
+# vv <- intersect(names(new), names(old))
+# new <- new[, ..vv]
+# old <- old[, ..vv]
+# rm(vv)
 
-# adjust coef size
-new[, cum_d_sd := cum_d_sd * 100]
+# # adjust coef size
+# new[, cum_d_sd := cum_d_sd * 100]
 
-# compare
-compare <- merge(new, old, by = c("type", "var"), all = T)
-stopifnot(nrow(compare) == nrow(new))
-rm(new, old)
+# # compare
+# compare <- merge(new, old, by = c("type", "var"), all = T)
+# stopifnot(nrow(compare) == nrow(new))
+# rm(new, old)
 
-compare[, mean(abs(coef.x - coef.y)) / mean(abs(coef.x))]
-compare[, mean(abs(se.x - se.y)) / mean(abs(se.x))]
-compare[, mean(abs(obs.x - obs.y)) / mean(abs(obs.x))]
-compare[, mean(abs(r2.x - r2.y)) / mean(abs(r2.x))]
-compare[, mean(abs(cum_d_sd.x - cum_d_sd.y)) / mean(abs(cum_d_sd.x))]
+# compare[, mean(abs(coef.x - coef.y)) / mean(abs(coef.x))]
+# compare[, mean(abs(se.x - se.y)) / mean(abs(se.x))]
+# compare[, mean(abs(obs.x - obs.y)) / mean(abs(obs.x))]
+# compare[, mean(abs(r2.x - r2.y)) / mean(abs(r2.x))]
+# compare[, mean(abs(cum_d_sd.x - cum_d_sd.y)) / mean(abs(cum_d_sd.x))]
 
-# not the same
-compare[type == "OFI_4lag", .(se.x / se.y)]
+# # not the same
+# compare[type == "OFI_4lag", .(se.x / se.y)]
 
-compare[, cor(coef.x, coef.y)]
-compare[, cor(se.x, se.y)] # this is somehow not identical, but sufficiently similar?
-compare[, cor(obs.x, obs.y)]
-compare[, cor(r2.x, r2.y)]
+# compare[, cor(coef.x, coef.y)]
+# compare[, cor(se.x, se.y)] # this is somehow not identical, but sufficiently similar?
+# compare[, cor(obs.x, obs.y)]
+# compare[, cor(r2.x, r2.y)]
