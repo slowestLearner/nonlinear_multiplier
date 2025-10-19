@@ -104,32 +104,64 @@ saveRDS(out_stdev, "tmp/price_impact/regression_contemp/panel_stdev.RDS")
 # # === SANITY check
 
 
-# # --- nonlinear
-# new <- readRDS("tmp/price_impact/regression_contemp/panel_nonlinear.RDS")
-# old <- readRDS("../20250117_quarterly/tmp/price_impact/regression_contemp/full_sample_panel.RDS")
+# --- nonlinear (have small differences)
+new <- readRDS("tmp/price_impact/regression_contemp/panel_nonlinear.RDS")
+old <- readRDS("../20250117_quarterly/tmp/price_impact/regression_contemp/full_sample_panel.RDS")
+old <- old[type != "OFI"]
+old[type == "OFI_resid", type := "OFI"]
+
+# get overlapping part
+new <- new[spec_idx %in% 1:3]
+vv <- intersect(names(new), names(old))
+new <- new[, ..vv]
+old <- old[, ..vv]
+rm(vv)
+stopifnot(dim(new) == dim(old))
+
+# convert coef units
+old[var == "ofi_absofi", coef := coef * 100]
+old[var == "ofi_absofi", se := se * 100]
+
+# compare
+compare <- merge(new, old, by = c("type", "var", "spec_idx"), all = T)
+stopifnot(nrow(compare) == nrow(new))
+rm(new, old)
+
+compare[, mean(abs(coef.x - coef.y)) / mean(abs(coef.x))]
+compare[, mean(abs(se.x - se.y)) / mean(abs(se.x))]
+compare[, mean(abs(obs.x - obs.y)) / mean(abs(obs.x))]
+compare[, mean(abs(r2.x - r2.y)) / mean(abs(r2.x))]
+
+
+# # --- stdev (no problem)
+# new <- readRDS("tmp/price_impact/regression_contemp/panel_stdev.RDS")
+# old <- readRDS("../20250117_quarterly/tmp/price_impact/regression_contemp/full_sample_panel_with_stdev_bins.RDS")
 # old <- old[type != "OFI"]
 # old[type == "OFI_resid", type := "OFI"]
 
 # # get overlapping part
 # new <- new[spec_idx %in% 1:3]
+
+# # get joint variables
+# new[, var := gsub("ofi_bin", "M", var)]
+# new[, var := gsub(" ", "", var)]
+# common_vars <- intersect(unique(new[, var]), unique(old[, var]))
+# new <- new[var %in% common_vars]
+# old <- old[var %in% common_vars]
+# rm(common_vars)
+
 # vv <- intersect(names(new), names(old))
 # new <- new[, ..vv]
 # old <- old[, ..vv]
 # rm(vv)
 # stopifnot(dim(new) == dim(old))
 
-# # convert coef units
-# old[var == "ofi_absofi", coef := coef * 100]
-# old[var == "ofi_absofi", se := se * 100]
-
 # # compare
 # compare <- merge(new, old, by = c("type", "var", "spec_idx"), all = T)
 # stopifnot(nrow(compare) == nrow(new))
 # rm(new, old)
 
-# compare[, cor(coef.x, coef.y)]
-# compare[, cor(se.x, se.y)]
-# compare[, cor(obs.x, obs.y)]
-# compare[, cor(r2.x, r2.y)]
-
-# tt = readRDS('../20250117_quarterly/tmp/price_impact/archive/multiplier_by_shock_size_quarterly/panel.RDS')
+# compare[, mean(abs(coef.x - coef.y)) / mean(abs(coef.x))]
+# compare[, mean(abs(se.x - se.y)) / mean(abs(se.x))]
+# compare[, mean(abs(obs.x - obs.y)) / mean(abs(obs.x))]
+# compare[, mean(abs(r2.x - r2.y)) / mean(abs(r2.x))]

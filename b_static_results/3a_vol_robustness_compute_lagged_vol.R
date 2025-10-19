@@ -1,8 +1,6 @@
 # Compare rolling standard deviations of FIT and OFI
 source("utilities/runmefirst.R")
 
-"../tmp/raw_data/reg_inputs/all_ofi_and_ret.RDS"
-
 # get FIT and OFI data
 data <- readRDS("tmp/raw_data/reg_inputs/all_ofi_and_ret.RDS")
 data <- data[type != "BMI"]

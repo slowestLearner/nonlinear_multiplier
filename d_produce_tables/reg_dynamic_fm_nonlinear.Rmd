@@ -1,0 +1,161 @@
+---
+author: ""
+header-includes:
+   - \usepackage{rotating}
+   - \usepackage{float}
+   - \usepackage{natbib}
+   - \usepackage{booktabs}
+   - \usepackage{multirow}
+geometry: "left=1cm,right=1cm,top=0.9cm,bottom=1.2cm"
+output: 
+  pdf_document:
+    citation_package: natbib
+    keep_tex: false
+    number_sections: true
+link-citations: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setoptions, echo = FALSE, warning=FALSE}
+library(knitr)
+setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+```
+
+
+```{r, echo = FALSE, results = 'asis', warning=FALSE, message=FALSE}
+rm(list = ls())
+options(xtable.comment = FALSE)
+library(data.table)
+library(dplyr)
+library(naniar)
+library(scales)
+library(tidyr)
+library(xtable)
+library(pracma)
+
+# read data
+# data = readRDS('../../tmp/price_impact/regression_with_lagged_interaction/fm_quarterly_without_direction.RDS')
+data = readRDS('../tmp/price_impact/regression_dynamic/fm_nonlinear.RDS')
+
+# choose specifications
+data = data[spec_idx == 3][, c('spec_idx','var_added','var_type') := NULL]
+data[, c('se_nw','nw_lag') := NULL]
+
+# parse types
+data[, lag := as.integer(substr(type, 5, 5))]
+data[, type := substr(type, 1, 3)]
+
+# choose variable and alter names for outputting
+data = data[var %in% c('ofi','ofi_absofi')]
+data[, var_lab := ifelse(var == 'ofi', '$d_{n,t}$', '$d_{n,t} \\times |\\sum_{l=1}^L d_{n,t-l}|$')]
+
+# change units
+data[var == 'ofi_absofi', coef := coef/100]
+data[var == 'ofi_absofi', se := se/100]
+data[, cum_d_sd := cum_d_sd * 100]
+
+# rank the types
+data[, type_idx := ifelse(type == 'FIT', 1, 2)]
+data[, idx := 100*type_idx + lag]
+
+# add stars
+cuts = abs(qnorm(c(.01, .05, .1)/2))
+data[, abs_tstat := abs(coef/se)]
+data[, ss := ifelse(abs_tstat > cuts[1], 3, ifelse(abs_tstat > cuts[2], 2, ifelse(abs_tstat > cuts[3], 1, 0)))]
+data[, coef_lab := paste0('$',sprintf("%.2f", coef))]
+data[, ss_lab := sapply(data[, ss], function(x){
+  ifelse(x > 0, 
+         paste0('^{',strcat(rep('*',x)),'}$'), 
+         '$')})
+]
+data[, coef_lab := paste0(coef_lab, ss_lab)]
+data[, ss_lab := NULL]
+
+est <- dcast(data[, list(var_lab, idx, coef_lab)], var_lab ~ idx, value.var = 'coef_lab') %>% 
+  dplyr::arrange(desc(var_lab)) %>%
+  dplyr::mutate(group_id = 100*row_number(), type = 'coef')
+
+se <- dcast(data[, list(var_lab, idx, se)], var_lab ~ idx, value.var = 'se') %>% 
+  dplyr::arrange(desc(var_lab)) %>%
+  dplyr::mutate_at(vars(2:ncol(.)), ~paste0('$(',sprintf("%.2f", round(.,2)),')$')) %>%
+  dplyr::mutate(group_id = 100*row_number()+1, type = 'se')
+
+tbl <- bind_rows(est, se); rm(est, se)
+
+ctrls = data.table(var_lab = 'Controls', t(rep('Y',8)))
+ctrls[, group_id := 301]
+ctrls[, type := '']
+names(ctrls) = names(tbl)
+tbl <- bind_rows(tbl, ctrls); rm(ctrls)
+
+obs_and_r2_and_sd <- unique(data[, list(idx, obs, r2, cum_d_sd)]) %>% 
+  mutate(obs = comma(obs),
+         r2 = paste0("$", sprintf("%.3f", r2), "$"),
+         cum_d_sd = paste0("$", sprintf("%.2f", cum_d_sd), " \\%$")) %>% 
+  pivot_longer(., -idx) %>% 
+  pivot_wider(names_from="idx", values_from="value") %>% 
+  dplyr::mutate(name = replace(name, name == "r2", "$R^2$")) %>%
+  dplyr::mutate(name = replace(name, name == "cum_d_sd", "$\\sigma(|\\sum_{l=1}^L d_{n,t-l}|)$")) %>%
+  mutate(name = replace(name, name == 'obs', 'Obs')) %>% 
+  rename(var_lab = name) %>% 
+  mutate(group_id = c(1001, 1002, 1003), type = '')
+
+tbl <- bind_rows(tbl, obs_and_r2_and_sd) %>% 
+  dplyr::arrange(group_id) %>% 
+  mutate(var_lab = ifelse(type == 'se', '', var_lab)) %>% 
+  mutate(type = NULL, group_id = NULL)
+rm(obs_and_r2_and_sd)
+
+names(tbl) <- as.character(1:ncol(tbl))
+
+# add col columns
+col_names <- data.table(t(as.data.frame(c('',paste0('(',1:(ncol(tbl)-1),')')))))
+names(col_names) <- as.character(1:ncol(col_names))
+tbl <- bind_rows(col_names, tbl); rm(col_names)
+
+align_vactor <- paste0("ll", paste0(rep("c", times = ncol(tbl) - 1), collapse = ""))
+x.side <- xtable(tbl, align = align_vactor)
+
+print(x.side, type = "latex", 
+      table.placement = "!ht",
+      include.rownames = FALSE,
+      include.colnames = FALSE,
+      tabular.environment = "tabular", 
+          caption.placement = NULL, #"top", NULL
+          hline.after=NULL, #We don't need hline; we use booktabs
+          floating=FALSE, # whether \begin{Table} should be created (TRUE) or not (FALSE)
+          sanitize.text.function = force, # Important to treat content of first column as latex function
+      add.to.row = list(pos = list(-1, 0, 
+                                   0, 4, 7, nrow(tbl)), 
+                        command = c(
+                          '\\hline \\multicolumn{9}{c}{Dependent variable: stock return $r_{n,t}$} \\\\\n
+                          \\hline $d_{n,t}$ = & \\multicolumn{4}{c}{FIT} & \\multicolumn{4}{c}{OFI} \\\\\n \\cmidrule(l){2-5} \\cmidrule(l){6-9}', 
+                          '& $L = 1$ & 2 & 3 & 4 & $L = 1$ & 2 & 3 & 4 \\\\\n \\cmidrule(l){2-5} \\cmidrule(l){6-9}', 
+                                    rep('\\vspace{5pt}',3), 
+                                    '\\hline \n'))
+)
+
+dir.create('../output/tables/', showWarnings = F, recursive = T)
+print(x.side, type = "latex", 
+      table.placement = "!ht",
+      include.rownames = FALSE,
+      include.colnames = FALSE,
+      tabular.environment = "tabular", 
+          caption.placement = NULL, #"top", NULL
+          hline.after=NULL, #We don't need hline; we use booktabs
+          floating=FALSE, # whether \begin{Table} should be created (TRUE) or not (FALSE)
+          sanitize.text.function = force, # Important to treat content of first column as latex function
+      add.to.row = list(pos = list(-1, 0, 
+                                   0, 4, 7, nrow(tbl)), 
+                        command = c(
+                          '\\hline \\multicolumn{9}{c}{Dependent variable: stock return $r_{n,t}$} \\\\\n
+                          \\hline $d_{n,t}$ = & \\multicolumn{4}{c}{FIT} & \\multicolumn{4}{c}{OFI} \\\\\n \\cmidrule(l){2-5} \\cmidrule(l){6-9}', 
+                          '& $L = 1$ & 2 & 3 & 4 & $L = 1$ & 2 & 3 & 4 \\\\\n \\cmidrule(l){2-5} \\cmidrule(l){6-9}', 
+                                    rep('\\vspace{5pt}',3), 
+                                    '\\hline \n')),
+      file = '../output/tables/reg_dynamic_fm_nonlinear.tex'
+)
+
+
+```

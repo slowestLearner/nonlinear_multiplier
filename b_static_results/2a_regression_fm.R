@@ -117,12 +117,14 @@ saveRDS(out_stdev, "tmp/price_impact/regression_contemp/fm_stdev.RDS")
 # # compare
 # compare <- merge(new, old, by = c("type", "var", "spec_idx"), all = T)
 # rm(new, old)
-# compare[, cor(coef.x, coef.y)]
-# compare[, cor(se.x, se.y)]
-# compare[, cor(obs.x, obs.y)]
-# compare[, cor(r2.x, r2.y)]
+# compare[, mean(abs(coef.x - coef.y)) / mean(abs(coef.x))]
+# compare[, mean(abs(se.x - se.y)) / mean(abs(se.x))]
+# compare[, mean(abs(obs.x - obs.y)) / mean(abs(obs.x))]
+# compare[, mean(abs(r2.x - r2.y)) / mean(abs(r2.x))]
 
-# # --- stdev
+
+# --- stdev
+
 # new <- readRDS("tmp/price_impact/regression_contemp/fm_stdev.RDS")
 # old <- readRDS("../20250117_quarterly/tmp/price_impact/multiplier_by_shock_size_quarterly/fm_by_stdev_based_bins.RDS")
 # old <- old[type != "OFI"]
@@ -144,7 +146,7 @@ saveRDS(out_stdev, "tmp/price_impact/regression_contemp/fm_stdev.RDS")
 # # compare
 # compare <- merge(new, old, by = c("type", "var", "spec_idx"), all = T)
 # rm(new, old)
-# compare[, cor(coef.x, coef.y)]
-# compare[, cor(se.x, se.y)]
-# compare[, cor(obs.x, obs.y)]
-# compare[, cor(r2.x, r2.y)]
+# compare[, mean(abs(coef.x - coef.y)) / mean(abs(coef.x))]
+# compare[, mean(abs(se.x - se.y)) / mean(abs(se.x))]
+# compare[, mean(abs(obs.x - obs.y)) / mean(abs(obs.x))]
+# compare[, mean(abs(r2.x - r2.y)) / mean(abs(r2.x))]

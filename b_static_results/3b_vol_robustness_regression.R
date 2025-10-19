@@ -129,33 +129,39 @@ saveRDS(out_stdev, "tmp/price_impact/regression_contemp/standardized_fm_stdev.RD
 # # --- SANITY check
 
 
-# --- stdev
-new <- readRDS("tmp/price_impact/regression_contemp/standardized_fm_stdev.RDS")
-new[, stdev_lag := as.integer(gsub(".*-", "", type))]
-new[, type := substr(type, 1, 3)]
-old <- readRDS("../20250117_quarterly/tmp/price_impact/regression_contemp/full_sample_standardized_d_by_stdev_bin.RDS")
-old <- old[type != "OFI"]
-old[type == "OFI_resid", type := "OFI"]
+# # --- stdev
+# new <- readRDS("tmp/price_impact/regression_contemp/standardized_fm_stdev.RDS")
+# new[, stdev_lag := as.integer(gsub(".*-", "", type))]
+# new[, type := substr(type, 1, 3)]
+# old <- readRDS("../20250117_quarterly/tmp/price_impact/regression_contemp/full_sample_standardized_d_by_stdev_bin.RDS")
+# old <- old[type != "OFI"]
+# old[type == "OFI_resid", type := "OFI"]
 
-# get joint variables
-new <- new[spec_idx == 3][, spec_idx := NULL]
-old[, var := gsub("M", "ofi_bin", var)]
-new[, var := gsub(" ", "", var)]
-vv <- intersect(names(new), names(old))
-new <- new[, ..vv]
-old <- old[, ..vv]
-rm(vv)
+# # get joint variables
+# new <- new[spec_idx == 3][, spec_idx := NULL]
+# old[, var := gsub("M", "ofi_bin", var)]
+# new[, var := gsub(" ", "", var)]
+# vv <- intersect(names(new), names(old))
+# new <- new[, ..vv]
+# old <- old[, ..vv]
+# rm(vv)
 
-common_vars <- intersect(unique(new[, var]), unique(old[, var]))
-new <- new[var %in% common_vars]
-old <- old[var %in% common_vars]
-rm(common_vars)
-stopifnot(dim(new) == dim(old))
+# common_vars <- intersect(unique(new[, var]), unique(old[, var]))
+# new <- new[var %in% common_vars]
+# old <- old[var %in% common_vars]
+# rm(common_vars)
+# stopifnot(dim(new) == dim(old))
 
-# compare - not identical, but similar?
-compare <- merge(new, old, by = c("type", "var", "stdev_lag"), all = T)
-rm(new, old)
-compare[, cor(coef.x, coef.y)]
-compare[, cor(se.x, se.y)]
-compare[, cor(obs.x, obs.y)]
-compare[, cor(r2.x, r2.y)]
+# # compare - not identical, but similar?
+# compare <- merge(new, old, by = c("type", "var", "stdev_lag"), all = T)
+# rm(new, old)
+
+# compare[, mean(abs(coef.x - coef.y)) / mean(abs(coef.x))]
+# compare[, mean(abs(se.x - se.y)) / mean(abs(se.x))]
+# compare[, mean(abs(obs.x - obs.y)) / mean(abs(obs.x))]
+# compare[, mean(abs(r2.x - r2.y)) / mean(abs(r2.x))]
+
+# compare[, cor(coef.x, coef.y)]
+# compare[, cor(se.x, se.y)]
+# compare[, cor(obs.x, obs.y)]
+# compare[, cor(r2.x, r2.y)]

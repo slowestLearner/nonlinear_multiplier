@@ -33,7 +33,7 @@ p.fama_macbeth <- function(data, ff, compare_coefs = FALSE) {
     out[, r2 := NULL]
 
     # let's do Newey-West
-    yms <- out[var == first(var), yyyymm]
+    yms <- sort(unique(out[, yyyymm]))
 
     # compare coefficient differences
     if (compare_coefs) {
@@ -63,7 +63,7 @@ p.fama_macbeth <- function(data, ff, compare_coefs = FALSE) {
         mm <- lm(coef ~ 1, out[var == this_var])
         coef_data <- rbind(coef_data, data.table(
             var = this_var, coef = mm$coef[1],
-            se = sqrt(vcov(mm))[1, 1],
+            se = sqrt(vcov(mm)[1, 1]),
             se_nw = sqrt(NeweyWest(mm, this_hor)[1, 1])
         ))
     }
@@ -73,7 +73,6 @@ p.fama_macbeth <- function(data, ff, compare_coefs = FALSE) {
     coef_data[, nw_lag := this_hor]
     return(coef_data)
 }
-
 
 
 # utility function: panel regression
