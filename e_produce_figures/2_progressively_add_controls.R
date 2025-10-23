@@ -52,9 +52,10 @@ for (this_type in unique(data_all[, type])) {
     theme_classic() +
     geom_hline(yintercept = 0, lty = 3) +
     theme(
-      legend.position = c(.2, .15), legend.title = element_blank(),
+      legend.position = c(.2, .17), legend.title = element_blank(),
       axis.text.x = element_text(angle = 45, vjust = .6),
-      text = element_text(size = 10)
+      text = element_text(size = 12),
+      legend.text = element_text(size = 10)
     ) +
     scale_x_discrete(
       limits = data[var == first(var), factor(spec_idx)],
@@ -69,8 +70,8 @@ for (this_type in unique(data_all[, type])) {
       name = NULL, # No legend title
       labels = setNames(data$var_tex, data$var)
     ) +
-    coord_cartesian(ylim = c(-3.2, NA))
+    coord_cartesian(ylim = c(-3.3, NA))
 
-  ggsave(paste0(to_dir, this_type, ".png"), pp, "png", w = 5, h = 4.5, dpi = 300, units = "in")
+  ggsave(paste0(to_dir, this_type, ".png"), pp, "png", w = 5, h = 4, dpi = 300, units = "in")
   toc()
 }

@@ -97,7 +97,7 @@ p.panel_regression <- function(data, ff, compare_coefs = FALSE) {
         b_13 <- matrix(c(-1, 0, 1))
 
         out <- rbind(out, data.table(
-            var = c("ofi_bin2 - ofi_bin1", "ofi_bin3 - ofi_bin2", "ofi_bi3 - ofi_bin1"),
+            var = c("ofi_bin2 - ofi_bin1", "ofi_bin3 - ofi_bin2", "ofi_bin3 - ofi_bin1"),
             coef = c(
                 (t(b_12) %*% cc)[1],
                 (t(b_23) %*% cc)[1],

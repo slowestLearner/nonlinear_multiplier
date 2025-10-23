@@ -61,9 +61,9 @@ data[, var := gsub(' ', '', var)]
 
 # Process variable labels for LaTeX formatting
 data[, var_lab := var]
-data[, var_lab := gsub('M1', 'M_\\{\\|d_{n,t}| < \\\\sigma\\}', var_lab)]
-data[, var_lab := gsub('M2', 'M_\\{\\|d_{n,t}| \\\\in \\[\\\\sigma, 2\\\\sigma\\]\\}', var_lab)]
-data[, var_lab := gsub('M3', "M_\\{\\|d_{n,t}| > 2 \\\\sigma\\}", var_lab)]
+data[, var_lab := gsub('M1', 'M_\\{\\\\\\left|\\\\sum_{l=1}^h d_{n,t-l}\\\\right| < \\\\sigma\\}', var_lab)]
+data[, var_lab := gsub('M2', 'M_\\{\\\\\\left|\\\\sum_{l=1}^h d_{n,t-l}\\\\right| \\\\in \\[\\\\sigma, 2\\\\sigma\\]\\}', var_lab)]
+data[, var_lab := gsub('M3', "M_\\{\\\\\\left|\\\\sum_{l=1}^h d_{n,t-l}\\\\right| > 2 \\\\sigma\\}", var_lab)]
 data[, var_lab := paste0('$', var_lab, '$')]
 
 # Create regression indices based on type and lag
