@@ -18,7 +18,6 @@ controls_bmi <- setdiff(names(tmp), c("yyyymm", "permno"))
 rm(tmp)
 
 
-
 # ###########################################################
 # Fama-MacBeth with nonlinear or stdev-based specification
 # ###########################################################
