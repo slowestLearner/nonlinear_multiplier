@@ -37,9 +37,9 @@ data_fit_and_ofi <- copy(data)
 rm(data)
 
 
-# === 2) add BMI to the quarterly OFI/FIT tables.
+# === 2) add BMI to the quarterly OFI/FIT tables. Make sure data is unique
+source("../utilities/runmefirst.R")
 
-# TODO: move it to upstrea
 # data <- data.table(haven::read_stata("../../../tests/9_russell_rdd/russell_rdd_stock_level_panel.dta"))
 data <- readRDS("../../../data/demand_shocks/bmi/russell_rdd_stock_level_panel.RDS")
 
@@ -78,6 +78,10 @@ data[, filter := NULL]
 setnames(data, c("full_ret", "d_bmi"), c("ret", "ofi"))
 data[, year := 100 * year + 6]
 setnames(data, "year", "yyyymm")
+
+# take out non-unique entries
+data[, idx := 1:.N, .(yyyymm, permno)]
+data <- data[idx == 1][, idx := NULL]
 
 # combine with FIT and OFI data
 reg_data <- rbind(data[, .(yyyymm, permno, type = "BMI", ret, ofi)], data_fit_and_ofi)

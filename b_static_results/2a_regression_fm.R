@@ -1,19 +1,21 @@
 # Contemporaneous regression of returns on demand
-source("utilities/runmefirst.R")
-source("utilities/regressions.R")
+library(this.path)
+setwd(this.path::this.dir())
+source("../utilities/runmefirst.R")
+source("../utilities/regressions.R")
 
 # load regression data
-data_all <- readRDS("tmp/raw_data/reg_inputs/reg_table_static.RDS")
+data_all <- readRDS("../tmp/raw_data/reg_inputs/reg_table_static.RDS")
 
 # get control variable names
-cdata <- readRDS("tmp/raw_data/controls/controls_classification.RDS")
+cdata <- readRDS("../tmp/raw_data/controls/controls_classification.RDS")
 controls_char <- cdata[control_type == "return-predictor", var]
 controls_liq <- cdata[control_type == "liquidity", var]
 controls_list <- c(controls_char, controls_liq)
 rm(cdata)
 
 # get names for bmi controls
-tmp <- readRDS("tmp/raw_data/controls/controls_for_BMI.RDS")
+tmp <- readRDS("../tmp/raw_data/controls/controls_for_BMI.RDS")
 controls_bmi <- setdiff(names(tmp), c("yyyymm", "permno"))
 rm(tmp)
 
@@ -94,8 +96,9 @@ out_nonlinear <- rbindlist(mclapply(split(data_all, by = "type"), function(x) {
 }, mc.cores = nc))
 toc()
 
-dir.create("tmp/price_impact/regression_contemp/", recursive = T, showWarnings = F)
-saveRDS(out_nonlinear, "tmp/price_impact/regression_contemp/fm_nonlinear.RDS")
+to_dir <- "../tmp/price_impact/regression_contemp/"
+dir.create(to_dir, recursive = T, showWarnings = F)
+saveRDS(out_nonlinear, paste0(to_dir, "fm_nonlinear.RDS"))
 
 # stdev-based specification---
 tic("static fm: stdev")
@@ -104,8 +107,23 @@ out_stdev <- rbindlist(mclapply(split(data_all, by = "type"), function(x) {
 }, mc.cores = nc))
 toc()
 
-dir.create("tmp/price_impact/regression_contemp/", recursive = T, showWarnings = F)
-saveRDS(out_stdev, "tmp/price_impact/regression_contemp/fm_stdev.RDS")
+# # take a look at results
+# tt <- copy(out_stdev[spec_idx %in% 1:3])
+# tt <- tt[grepl("ofi", var)]
+# tt2 <- unique(tt[, .(var)])[, var_idx := .I]
+# tt2[, var_lab := paste0(var_idx, "_", var)]
+# tt <- merge(tt, tt2, by = "var")
+# rm(tt2)
+# tt[, type_lab := paste0(type, "_", spec_idx)]
+# tt[, tstat := coef / se]
+
+# options(width = 200)
+# dcast(tt[grepl("OFI", type)], var_lab ~ type_lab, value.var = c("coef"))
+# dcast(tt[grepl("OFI", type)], var_lab ~ type_lab, value.var = c("tstat"))
+
+to_dir <- "../tmp/price_impact/regression_contemp/"
+dir.create(to_dir, recursive = T, showWarnings = F)
+saveRDS(out_stdev, paste0(to_dir, "fm_stdev.RDS"))
 
 
 # # === SANITY check

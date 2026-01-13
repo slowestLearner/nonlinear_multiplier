@@ -1,10 +1,12 @@
 # Dynamic regression of returns on demand. On a 6-core machine took around 1 min
-source("utilities/runmefirst.R")
-source("utilities/regressions.R")
+library(this.path)
+setwd(this.path::this.dir())
+source("../utilities/runmefirst.R")
+source("../utilities/regressions.R")
 
 # load regression data
 tic("Loading regression data")
-data <- readRDS("tmp/raw_data/reg_inputs/reg_table_dynamic.RDS")
+data <- readRDS("../tmp/raw_data/reg_inputs/reg_table_dynamic.RDS")
 
 # separate controls and main variables
 vars_id <- c("yyyymm", "permno", "type")
@@ -35,7 +37,7 @@ data_reg[, sd_ofi := NULL]
 data_reg[, ofi_absofi := ofi * abs(cumofi_lag)]
 
 # get control variable names
-cdata <- readRDS("tmp/raw_data/controls/controls_classification.RDS")
+cdata <- readRDS("../tmp/raw_data/controls/controls_classification.RDS")
 controls_char <- cdata[control_type == "return-predictor", var]
 controls_liq <- cdata[control_type == "liquidity", var]
 controls_list <- c(controls_char, controls_liq)
@@ -117,8 +119,9 @@ sd_data <- data_reg[, .(cum_d_sd = sd(cumofi_lag)), .(type)]
 out_nonlinear <- merge(out_nonlinear, sd_data, by = "type")
 rm(sd_data)
 
-dir.create("tmp/price_impact/regression_dynamic/", recursive = T, showWarnings = F)
-saveRDS(out_nonlinear, "tmp/price_impact/regression_dynamic/fm_nonlinear.RDS")
+to_dir <- "../tmp/price_impact/regression_dynamic/"
+dir.create(to_dir, recursive = T, showWarnings = F)
+saveRDS(out_nonlinear, paste0(to_dir, "fm_nonlinear.RDS"))
 toc()
 
 # stdev-based specification---
@@ -127,14 +130,26 @@ out_stdev <- rbindlist(mclapply(split(data_reg, by = "type"), function(x) {
   p.process_one_type(x, reg_spec = "stdev")
 }, mc.cores = nc))
 
-# also get cum_d_sd
-sd_data <- data_reg[, .(cum_d_sd = sd(cumofi_lag)), .(type)]
+# also get TS average of XS SD
+sd_data <- data_reg[, .(cum_d_sd = sd(cumofi_lag)), .(type, yyyymm)][, .(cum_d_sd = mean(cum_d_sd)), .(type)]
 out_stdev <- merge(out_stdev, sd_data, by = "type")
 rm(sd_data)
 
+# # --- take a look at results
+# out <- out_stdev[spec_idx == 3]
+# out <- out[grepl("ofi", var)]
+# tt <- unique(out[, .(var)])[, var_idx := .I][, var_lab := paste0(var_idx, "_", var)]
+# out <- merge(out, tt, by = "var")
+# rm(tt)
+# out[, type_lab := paste0(type, "_", spec_idx)]
+# out[, tstat := coef / se]
+# out <- out[grepl("OFI", type)]
+# dcast(out, var_lab ~ type, value.var = c("coef"))
+# dcast(out, var_lab ~ type, value.var = c("tstat"))
 
-dir.create("tmp/price_impact/regression_dynamic/", recursive = T, showWarnings = F)
-saveRDS(out_stdev, "tmp/price_impact/regression_dynamic/fm_stdev.RDS")
+to_dir <- "../tmp/price_impact/regression_dynamic/"
+dir.create(to_dir, recursive = T, showWarnings = F)
+saveRDS(out_stdev, paste0(to_dir, "fm_stdev.RDS"))
 toc()
 
 

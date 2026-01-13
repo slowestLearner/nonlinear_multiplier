@@ -1,23 +1,25 @@
 # Put together data for static regressions
+library(this.path)
+setwd(this.path::this.dir())
 source("utilities/runmefirst.R")
 
 # All demand and returns
-data <- readRDS("tmp/raw_data/reg_inputs/all_ofi_and_ret.RDS")
+data <- readRDS("../tmp/raw_data/reg_inputs/all_ofi_and_ret.RDS")
 data <- data[yyyymm >= 199306] # liquidity-characteristics are not available for 199303
 
 # add controls that are specific to BMI
-tmp <- readRDS("tmp/raw_data/controls/controls_for_BMI.RDS")
+tmp <- readRDS("../tmp/raw_data/controls/controls_for_BMI.RDS")
 controls_bmi <- setdiff(names(tmp), c("yyyymm", "permno")) # variable names for BMI-specific controls
 data <- merge(data, tmp, by = c("yyyymm", "permno"), all.x = T)
 rm(tmp)
 
 # merge in other controls
-tmp <- readRDS("tmp/raw_data/controls/quarterly_controls_lagged.RDS")
+tmp <- readRDS("../tmp/raw_data/controls/quarterly_controls_lagged.RDS")
 data <- merge(data, tmp, by = c("yyyymm", "permno"), all.x = T)
 rm(tmp)
 
 # get the names of other controls
-cdata <- readRDS("tmp/raw_data/controls/controls_classification.RDS")
+cdata <- readRDS("../tmp/raw_data/controls/controls_classification.RDS")
 controls_liq <- cdata[control_type == "liquidity", var]
 controls_char <- cdata[control_type == "return-predictor", var]
 controls_ind <- cdata[control_type == "industry", var]
@@ -49,4 +51,6 @@ data[, ofi_bin2 := ifelse(bin == 2, ofi, 0)]
 data[, ofi_bin3 := ifelse(bin == 3, ofi, 0)]
 data[, sd_ofi := NULL]
 
-saveRDS(data, "tmp/raw_data/reg_inputs/reg_table_static.RDS")
+to_dir <- "../tmp/raw_data/reg_inputs/"
+dir.create(to_dir, recursive = T, showWarnings = F)
+saveRDS(data, paste0(to_dir, "reg_table_static.RDS"))

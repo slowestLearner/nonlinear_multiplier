@@ -1,8 +1,10 @@
 # Put together data for dynamic regressions
-source("utilities/runmefirst.R")
+library(this.path)
+setwd(this.path::this.dir())
+source("../utilities/runmefirst.R")
 
 # Start with static demand for FIT and OFI
-data <- readRDS("tmp/raw_data/reg_inputs/reg_table_static.RDS") %>% filter(type != "BMI")
+data <- readRDS("../tmp/raw_data/reg_inputs/reg_table_static.RDS") %>% filter(type != "BMI")
 
 # get rid of the static nonlinear variables
 data[, c("ofi_absofi", "ofi_bin1", "ofi_bin2", "ofi_bin3", "bin") := NULL]
@@ -27,4 +29,6 @@ for (i in 2:4) {
 }
 data[, paste0("ofi_", 1:4) := NULL]
 
-saveRDS(data, "tmp/raw_data/reg_inputs/reg_table_dynamic.RDS")
+to_dir <- "../tmp/raw_data/reg_inputs/"
+dir.create(to_dir, recursive = T, showWarnings = F)
+saveRDS(data, paste0(to_dir, "reg_table_dynamic.RDS"))
