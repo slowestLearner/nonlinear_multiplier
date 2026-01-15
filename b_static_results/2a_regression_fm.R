@@ -125,7 +125,6 @@ to_dir <- "../tmp/price_impact/regression_contemp/"
 dir.create(to_dir, recursive = T, showWarnings = F)
 saveRDS(out_stdev, paste0(to_dir, "fm_stdev.RDS"))
 
-
 # # === SANITY check
 
 # # --- nonlinear

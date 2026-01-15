@@ -21,79 +21,79 @@ editor_options:
 rm(list = ls())
 library(data.table)
 library(dplyr)
-library(naniar)
 library(scales)
-library(tidyr)
 library(xtable)
-library(pracma)
+library(this.path)
+setwd(this.path::this.dir())
 
 # FIT and OFI
-data = readRDS('../tmp/raw_data/sum_stats/fit_and_ofi.RDS')
-
-# BMI
-tmp = readRDS('../tmp/raw_data/sum_stats/bmi.RDS')
-tmp = cbind(data.table(var = 'BMI'), tmp)
-names(tmp)[3:4] = c('x_mean','x_sd')
-data = rbind(data, tmp); rm(tmp)
+data <- readRDS("../tmp/raw_data/sum_stats/cross_section/all.RDS")[var != "OFI_pre_whitened"]
+names(data)[3:4] <- c("x_mean", "x_sd")
 
 # order rows
-tmp = data.table(var = c('ret','BMI','FIT','OFI','me_1'), idx = 1:5)
-data = merge(data, tmp, by = 'var'); rm(tmp)
-data = data[order(idx)]
+tmp <- data.table(var = c("ret", "BMI", "FIT", "OFI", "me_1"), idx = 1:5)
+data <- merge(data, tmp, by = "var")
+rm(tmp)
+data <- data[order(idx)]
 data[, idx := NULL]
 
-data <- data %>% 
-  dplyr::mutate(var = c('Quarterly return (\\%)', 'Demand ($\\Delta$BMI, \\%)', 'Demand (FIT, \\%)', 'Demand (OFI, \\%)', 'Market cap (\\$m)')) %>%
+data <- data %>%
+  dplyr::mutate(var = c("Quarterly return (\\%)", "Demand ($\\Delta$BMI, \\%)", "Demand (FIT, \\%)", "Demand (OFI, \\%)", "Market cap (\\$m)")) %>%
   dplyr::mutate(obs = comma(obs))
 
 # format numbers
-data_first <- data[1:4,] %>% dplyr::mutate_at(vars(3:ncol(.)), ~sprintf("%.2f", round(.,2)))
-data_last <- data[5,] %>% dplyr::mutate_at(vars(3:ncol(.)), ~comma(.))
+data_first <- data[1:4, ] %>% dplyr::mutate_at(vars(3:ncol(.)), ~ sprintf("%.2f", round(., 2)))
+data_last <- data[5, ] %>% dplyr::mutate_at(vars(3:ncol(.)), ~ comma(.))
 data <- bind_rows(data_first, data_last)
 rm(data_first, data_last)
 
 # add col columns
-col_names <- data.table(t(as.data.frame(c('',paste0('(',1:(ncol(data)-1),')')))))
+col_names <- data.table(t(as.data.frame(c("", paste0("(", 1:(ncol(data) - 1), ")")))))
 names(data) <- names(col_names)
-data <- bind_rows(col_names, data); rm(col_names)
+data <- bind_rows(col_names, data)
+rm(col_names)
 
 # add variable names
-names(data) = c('','Obs','Mean','StDev',paste0(c(1,5,25,50,75,95,99), '\\%'))
+names(data) <- c("", "Obs", "Mean", "StDev", paste0(c(1, 5, 25, 50, 75, 95, 99), "\\%"))
 
 align_vactor <- paste0("ll", paste0(rep("c", times = ncol(data) - 1), collapse = ""))
 x.side <- xtable(data, align = align_vactor)
 
-print(x.side, type = "latex", 
-      table.placement = "!ht",
-      include.rownames = FALSE,
-      include.colnames = TRUE,
-      tabular.environment = "tabular", 
-          caption.placement = NULL, #"top", NULL
-          hline.after=NULL, #We don't need hline; we use booktabs
-          floating=FALSE, # whether \begin{Table} should be created (TRUE) or not (FALSE)
-          sanitize.text.function = force, # Important to treat content of first column as latex function
-      add.to.row = list(pos = list(-1, 0,nrow(data)), 
-                        command = c('\\hline & & & & \\multicolumn{7}{c}{Percentiles} \\\\\n   \\cmidrule(l){5-11}\n', 
-                                    ' \\cmidrule(l){2-4}\n \\cmidrule(l){5-11}\n',
-                                    '\\hline \n'))
+this_add_to_row <- list(
+  pos = list(-1, 0, nrow(data)),
+  command = c(
+    "\\hline & & & & \\multicolumn{7}{c}{Percentiles} \\\\\n   \\cmidrule(l){5-11}\n",
+    " \\cmidrule(l){2-4}\n \\cmidrule(l){5-11}\n",
+    "\\hline \n"
+  )
 )
 
-dir.create('../output/tables/')
-print(x.side, type = "latex", 
-      table.placement = "!ht",
-      include.rownames = FALSE,
-      include.colnames = TRUE,
-      tabular.environment = "tabular", 
-          caption.placement = NULL, #"top", NULL
-          hline.after=NULL, #We don't need hline; we use booktabs
-          floating=FALSE, # whether \begin{Table} should be created (TRUE) or not (FALSE)
-          sanitize.text.function = force, # Important to treat content of first column as latex function
-      add.to.row = list(pos = list(-1, 0,nrow(data)), 
-                        command = c('\\hline & & & & \\multicolumn{7}{c}{Percentiles} \\\\\n   \\cmidrule(l){5-11}\n', 
-                                    ' \\cmidrule(l){2-4}\n \\cmidrule(l){5-11}\n',
-                                    '\\hline \n')),
-      file = '../output/tables/summary_statistics.tex'
+print(x.side,
+  type = "latex",
+  table.placement = "!ht",
+  include.rownames = FALSE,
+  include.colnames = TRUE,
+  tabular.environment = "tabular",
+  caption.placement = NULL, # "top", NULL
+  hline.after = NULL, # We don't need hline; we use booktabs
+  floating = FALSE, # whether \begin{Table} should be created (TRUE) or not (FALSE)
+  sanitize.text.function = force, # Important to treat content of first column as latex function
+  add.to.row = this_add_to_row
 )
 
-
+to_dir <- "../output/tables/"
+dir.create(to_dir, recursive = T, showWarnings = F)
+print(x.side,
+  type = "latex",
+  table.placement = "!ht",
+  include.rownames = FALSE,
+  include.colnames = TRUE,
+  tabular.environment = "tabular",
+  caption.placement = NULL, # "top", NULL
+  hline.after = NULL, # We don't need hline; we use booktabs
+  floating = FALSE, # whether \begin{Table} should be created (TRUE) or not (FALSE)
+  sanitize.text.function = force, # Important to treat content of first column as latex function
+  add.to.row = this_add_to_row,
+  file = paste0(to_dir, "summary_statistics.tex")
+)
 ```
