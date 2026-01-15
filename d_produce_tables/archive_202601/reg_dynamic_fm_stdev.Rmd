@@ -34,23 +34,19 @@ setwd(this.path::this.dir())
 # ==============================================================================
 
 # Load data
+# data <- readRDS('../../tmp/price_impact/regression_with_lagged_interaction/fm_quarterly_by_stdev_based_bins.RDS')
 data <- readRDS("../tmp/price_impact/regression_dynamic/fm_stdev.RDS")[!grepl("OFI_pre_whitened", type)]
 
-# choose a lag
-data <- data[grepl("_4lag", type)]
-data[, type := gsub("_4lag", "", type)]
+# choose specifications
+data <- data[spec_idx == 3][, c("spec_idx", "var_added", "var_type") := NULL]
+data[, c("se_nw", "nw_lag") := NULL]
 
-unique(data[, .(spec_idx, var_type)])
+# parse types
+data[, lag := as.integer(substr(type, 5, 5))]
+data[, type := substr(type, 1, 3)]
 
-# choose a few specifications
-data <- data[spec_idx %in% c(1:3, 16, 22)]
-data[, c("var_added", "var_type", "se_nw", "nw_lag") := NULL]
-
-# rank regression specifications
-tmp <- unique(data[, .(type, spec_idx)])[order(type, spec_idx)]
-tmp[, reg_idx := .I]
-data <- merge(data, tmp, by = c("type", "spec_idx"))
-rm(tmp)
+# Filter and clean type variable
+data[, type_idx := ifelse(type == "FIT", 1, 2)]
 
 # choose variable and alter names for outputting
 data <- data[grepl("ofi_bin", var)]
@@ -64,6 +60,12 @@ data[, var_lab := gsub("M2", "M_\\{\\\\\\left|\\\\sum_{l=1}^L d_{n,t-l}\\\\right
 data[, var_lab := gsub("M3", "M_\\{\\\\\\left|\\\\sum_{l=1}^L d_{n,t-l}\\\\right| > 2 \\\\sigma\\}", var_lab)]
 data[, var_lab := paste0("$", var_lab, "$")]
 
+# Create regression indices based on type and lag
+reg_specs <- unique(data[, .(type_idx, lag)])[order(type_idx, lag)]
+reg_specs[, reg_idx := 1:.N]
+data <- merge(data, reg_specs, by = c("type_idx", "lag"))
+rm(reg_specs)
+
 # ==============================================================================
 # PANEL A: REGRESSION RESULTS
 # ==============================================================================
@@ -73,7 +75,7 @@ main_vars <- data[var %in% paste0("M", 1:3)]
 
 # Create index for variable ordering
 var_index <- unique(main_vars[, list(var)])
-var_index[, idx := .I]
+var_index[, idx := 1:.N]
 main_vars <- merge(main_vars, var_index, by = "var")
 rm(var_index)
 
@@ -108,7 +110,7 @@ se_table <- dcast(main_vars[, list(idx, reg_idx, se)],
   value.var = "se"
 ) %>%
   mutate(group_id = 100 * row_number() + 1, type = "se") %>%
-  mutate(across(2:11, ~ paste0("$(", sprintf("%.2f", round(., 2)), ")$")))
+  mutate(across(2:9, ~ paste0("$(", sprintf("%.2f", round(., 2)), ")$")))
 
 # Get variable labels for joining
 var_labels <- unique(main_vars[, list(idx, var_lab)])
@@ -122,18 +124,15 @@ reg_tbl <- bind_rows(est_table, se_table) %>%
 rm(est_table, se_table)
 
 # Add control indicators
-row1 <- c("Predictor controls", "N", "Y", "Y", "Y", "Y", "N", "Y", "Y", "Y", "Y")
-row2 <- c("Liquidity controls", "N", "N", "Y", "Y", "Y", "N", "N", "Y", "Y", "Y")
-row3 <- c("Interacted: predictors", "N", "N", "N", "Y", "Y", "N", "N", "N", "Y", "Y")
-row4 <- c("Interacted: liquidity", "N", "N", "N", "Y", "Y", "N", "N", "N", "Y", "Y")
-
-# Combine into a matrix first, then convert to data.table
-mat <- rbind(row1, row2, row3, row4)
-controls <- as.data.table(mat)
-controls[, group_id := 400 + 1:4]
+controls <- data.table(
+  var_lab = c("Predictor controls", "Liquidity controls"),
+  t(rep("Y", 8))
+)
+controls[, group_id := 400 + 1:2]
 controls[, type := ""]
 setnames(controls, names(reg_tbl))
 reg_tbl <- bind_rows(reg_tbl, controls)
+rm(controls)
 
 # Add observations and R-squared
 obs_and_r2 <- unique(data[, list(reg_idx, obs, r2)]) %>%
@@ -200,7 +199,7 @@ se_other <- dcast(other_vars[, list(idx, reg_idx, se)],
   value.var = "se"
 ) %>%
   mutate(group_id = 100 * row_number() + 1, type = "se") %>%
-  mutate(across(2:11, ~ paste0("$(", sprintf("%.2f", round(., 2)), ")$")))
+  mutate(across(2:9, ~ paste0("$(", sprintf("%.2f", round(., 2)), ")$")))
 
 # Combine Panel B tables
 comp_tbl <- bind_rows(est_other, se_other) %>%
@@ -222,7 +221,7 @@ rm(est_other, se_other, other_var_index, other_vars, obs_and_r2, comp_tbl)
 # ==============================================================================
 
 # Add column names
-col_names <- data.table(t(c("", paste0("(", 1:10, ")"))))
+col_names <- data.table(t(c("", paste0("(", 1:8, ")"))))
 setnames(col_names, names(reg_tbl))
 reg_tbl <- bind_rows(col_names, reg_tbl)
 rm(col_names)
