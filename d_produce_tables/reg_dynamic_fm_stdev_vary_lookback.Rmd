@@ -37,18 +37,14 @@ setwd(this.path::this.dir())
 # Load data
 data <- readRDS("../tmp/price_impact/regression_dynamic/fm_stdev.RDS")[!grepl("OFI_pre_whitened", type)]
 
-# choose a lag
-data <- data[grepl("_4lag", type)]
-data[, type := gsub("_4lag", "", type)]
-
 # choose a few specifications
-data <- data[spec_idx %in% c(2:3, 16, 22)]
-data[, c("var_added", "var_type", "se_nw", "nw_lag") := NULL]
+data <- data[spec_idx == 22]
+data[, c("var_added", "var_type", "se_nw", "nw_lag", "spec_idx") := NULL]
 
 # rank regression specifications
-tmp <- unique(data[, .(type, spec_idx)])[order(type, spec_idx)]
+tmp <- unique(data[, .(type)])[order(type)]
 tmp[, reg_idx := .I]
-data <- merge(data, tmp, by = c("type", "spec_idx"))
+data <- merge(data, tmp, by = c("type"))
 rm(tmp)
 
 # choose variable and alter names for outputting
@@ -120,11 +116,20 @@ reg_tbl <- bind_rows(est_table, se_table) %>%
   rename(var_lab = idx)
 rm(est_table, se_table)
 
+# # add column names
+# # --- added: begin
+# col_names <- data.table(t(c("", rep(c("L = 1", "2", "3", "4"), 2), NA, "")))
+# setnames(col_names, names(reg_tbl))
+# col_names[, group_id := as.numeric(0)]
+# reg_tbl <- rbind(col_names, reg_tbl)
+# rm(col_names)
+# # --- added: end
+
 # Add control indicators
 row1 <- c("Predictor controls", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y")
-row2 <- c("Liquidity controls", "N", "Y", "Y", "Y", "N", "Y", "Y", "Y")
-row3 <- c("Interacted: predictors", "N", "N", "Y", "Y", "N", "N", "Y", "Y")
-row4 <- c("Interacted: liquidity", "N", "N", "Y", "Y", "N", "N", "Y", "Y")
+row2 <- c("Liquidity controls", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y")
+row3 <- c("Interacted: predictors", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y")
+row4 <- c("Interacted: liquidity", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y")
 
 # Combine into a matrix first, then convert to data.table
 mat <- rbind(row1, row2, row3, row4)
@@ -226,6 +231,12 @@ setnames(col_names, names(reg_tbl))
 reg_tbl <- bind_rows(col_names, reg_tbl)
 rm(col_names)
 
+# Add lookback window information
+lookback_windows <- data.table(t(c("", rep(c("$L=1$", as.character(2:4)), 2))))
+setnames(lookback_windows, names(reg_tbl))
+reg_tbl <- bind_rows(lookback_windows, reg_tbl)
+rm(lookback_windows)
+
 # Create final table object
 tbl <- copy(reg_tbl)
 
@@ -235,30 +246,17 @@ x_table <- xtable(tbl, align = align_vector)
 
 # Define LaTeX formatting commands
 this_add_to_row <- list(
-  pos = list(-1, 0, 0, 6, 10, 13, nrow(tbl)),
+  pos = list(-1, 1, 1, 7, 11, 14, nrow(tbl)),
   command = c(
     "\\hline \\multicolumn{9}{c}{Panel A: price impact regressions} \\\\\n \\hline
     & \\multicolumn{8}{c}{Dependent variable: stock return $r_{n,t}$} \\\\\n
     \\cmidrule(l){2-9} $d_{n,t} = $ & \\multicolumn{4}{c}{FIT} & \\multicolumn{4}{c}{OFI} \\\\\n \\cmidrule(l){2-5} \\cmidrule(l){6-9} \n",
-    "\\cmidrule(l){2-5} \\cmidrule(l){6-9}",
-    rep("\\vspace{5pt}", 3),
-    "\\hline \\multicolumn{9}{c}{Panel B: Coefficient differences} \\\\\n \\hline",
+    "\\cmidrule(l){2-5} \\cmidrule(l){6-9} \n",
+    rep("\\vspace{5pt}\n", 3),
+    "\\hline \\multicolumn{9}{c}{Panel B: Coefficient differences} \\\\\n \\hline \n",
     "\\hline \n"
   )
 )
-
-# this_add_to_row <- list(
-#   pos = list(-1, 0, 0, 6, 10, 13, nrow(tbl)),
-#   command = c(
-#     "\\hline \\multicolumn{11}{c}{Panel A: price impact regressions} \\\\\n \\hline
-#     & \\multicolumn{10}{c}{Dependent variable: stock return $r_{n,t}$} \\\\\n
-#     \\cmidrule(l){2-11} $d_{n,t} = $ & \\multicolumn{5}{c}{FIT} & \\multicolumn{5}{c}{OFI} \\\\\n \\cmidrule(l){2-6} \\cmidrule(l){7-11} \n",
-#     "\\cmidrule(l){2-6} \\cmidrule(l){7-11}",
-#     rep("\\vspace{5pt}", 3),
-#     "\\hline \\multicolumn{11}{c}{Panel B: Coefficient differences} \\\\\n \\hline",
-#     "\\hline \n"
-#   )
-# )
 
 # Print to console
 print(x_table,
@@ -288,6 +286,6 @@ print(x_table,
   floating = FALSE,
   sanitize.text.function = force,
   add.to.row = this_add_to_row,
-  file = paste0(to_dir, "reg_dynamic_fm_stdev.tex")
+  file = paste0(to_dir, "reg_dynamic_fm_stdev_vary_lookback.tex")
 )
 ```

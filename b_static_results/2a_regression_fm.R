@@ -107,6 +107,7 @@ out_stdev <- rbindlist(mclapply(split(data_all, by = "type"), function(x) {
 }, mc.cores = nc))
 toc()
 
+
 # # take a look at results
 # tt <- copy(out_stdev[spec_idx %in% 1:3])
 # tt <- tt[grepl("ofi", var)]
