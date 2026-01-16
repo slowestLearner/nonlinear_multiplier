@@ -43,6 +43,7 @@ data[, type := gsub("_4lag", "", type)]
 
 # choose a few specifications
 data <- data[spec_idx %in% c(2:3, 16, 22)]
+data[, se := se_nw]
 data[, c("var_added", "var_type", "se_nw", "nw_lag") := NULL]
 
 # rank regression specifications
@@ -124,7 +125,7 @@ rm(est_table, se_table)
 row1 <- c("Predictor controls", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y")
 row2 <- c("Liquidity controls", "N", "Y", "Y", "Y", "N", "Y", "Y", "Y")
 row3 <- c("Interacted: predictors", "N", "N", "Y", "Y", "N", "N", "Y", "Y")
-row4 <- c("Interacted: liquidity", "N", "N", "Y", "Y", "N", "N", "Y", "Y")
+row4 <- c("Interacted: liquidity", "N", "N", "N", "Y", "N", "N", "N", "Y")
 
 # Combine into a matrix first, then convert to data.table
 mat <- rbind(row1, row2, row3, row4)

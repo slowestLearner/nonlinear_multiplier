@@ -1,15 +1,17 @@
 # ------ plot figures: show that progressively adding controls do not impact inference
-source("utilities/runmefirst.R")
+library(this.path)
+setwd(this.path::this.dir())
+source("../utilities/runmefirst.R")
 library(latex2exp)
 library(styler)
 
 # --- create directories
 tic("loading data")
-to_dir <- "output/figs/price_impact/static/more_controls/"
+to_dir <- "../output/figs/price_impact/static/more_controls/"
 dir.create(to_dir, recursive = T, showWarnings = F)
 
 # regression results
-data <- readRDS("tmp/price_impact/regression_contemp/fm_stdev.RDS")
+data <- readRDS("../tmp/price_impact/regression_contemp/fm_stdev.RDS")[type != "OFI_pre_whitened"]
 
 # start from the spedification before adding demand-based interactions
 data <- data[spec_idx >= 3]
@@ -23,7 +25,7 @@ data[, var := gsub("ofi_bin", "M", var)]
 # parse variable names
 data <- data[, .(type, spec_idx, coef, se, var, var_added)] # var_added denote the newest control introduced (interacted with demand)
 
-tmp <- readRDS("tmp/raw_data/controls/controls_classification.RDS")
+tmp <- readRDS("../tmp/raw_data/controls/controls_classification.RDS")
 tmp <- rbind(tmp, data.table(var = "none", control_type = "", var_lab = "None"))
 setnames(tmp, "var", "var_added")
 data <- merge(data, tmp, by = "var_added", all.x = T)
@@ -41,6 +43,7 @@ toc()
 
 # Plot
 for (this_type in unique(data_all[, type])) {
+  # this_type <- 'FIT'
   tic(paste0("Plotting ", this_type))
   data <- copy(data_all[type == this_type])
   data <- data[order(spec_idx)]
@@ -70,7 +73,7 @@ for (this_type in unique(data_all[, type])) {
       name = NULL, # No legend title
       labels = setNames(data$var_tex, data$var)
     ) +
-    coord_cartesian(ylim = c(-3.3, NA))
+    coord_cartesian(ylim = c(-3.5, NA))
 
   ggsave(paste0(to_dir, this_type, ".png"), pp, "png", w = 5, h = 4, dpi = 300, units = "in")
   toc()

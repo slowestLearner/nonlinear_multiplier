@@ -1,20 +1,21 @@
 # Compare rolling standard deviations of FIT and OFI
-source("utilities/runmefirst.R")
-source("utilities/regressions.R")
+library(this.path)
+setwd(this.path::this.dir())
+source("../utilities/runmefirst.R")
+source("../utilities/regressions.R")
 
 # load regression data
-data <- readRDS("tmp/raw_data/reg_inputs/reg_table_static.RDS") %>% filter(type != "BMI")
-gc()
+data <- readRDS("../tmp/raw_data/reg_inputs/reg_table_static.RDS") %>% filter(type != "BMI")
 
 # get control variable names
-cdata <- readRDS("tmp/raw_data/controls/controls_classification.RDS")
+cdata <- readRDS("../tmp/raw_data/controls/controls_classification.RDS")
 controls_char <- cdata[control_type == "return-predictor", var]
 controls_liq <- cdata[control_type == "liquidity", var]
 controls_list <- c(controls_char, controls_liq)
 rm(cdata)
 
 # merge with lagged stdev
-demand_vol <- readRDS("tmp/raw_data/reg_inputs/quarterly_fit_and_ofi_lagged_rolling_stdev.RDS")
+demand_vol <- readRDS("../tmp/raw_data/reg_inputs/quarterly_fit_and_ofi_lagged_rolling_stdev.RDS")
 demand_vol <- demand_vol[0 == rowSums(is.na(demand_vol))]
 demand_vol[, std_ofi := Winsorize(std_ofi, val = quantile(std_ofi, probs = c(.01, .99))), .(type, spec)]
 
@@ -113,7 +114,7 @@ p.process_one_type <- function(data, reg_spec = "nonlinear") {
 }
 
 
-# stdev-based specification---
+# in parallel, takes around X mins
 tic()
 out_stdev <- rbindlist(mclapply(split(data_all, by = "type"), function(x) {
     p.process_one_type(x, reg_spec = "stdev")
@@ -121,9 +122,9 @@ out_stdev <- rbindlist(mclapply(split(data_all, by = "type"), function(x) {
 gc()
 toc()
 
-dir.create("tmp/price_impact/regression_contemp/", recursive = T, showWarnings = F)
-saveRDS(out_stdev, "tmp/price_impact/regression_contemp/standardized_fm_stdev.RDS")
-
+to_dir <- "../tmp/price_impact/regression_contemp/"
+dir.create(to_dir, recursive = T, showWarnings = F)
+saveRDS(out_stdev, paste0(to_dir, "standardized_fm_stdev.RDS"))
 
 
 # # --- SANITY check

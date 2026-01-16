@@ -1,20 +1,22 @@
 # Contemporaneous regression of returns on demand: panel regressions
-source("utilities/runmefirst.R")
-source("utilities/regressions.R")
+library(this.path)
+setwd(this.path::this.dir())
+source("../utilities/runmefirst.R")
+source("../utilities/regressions.R")
 
 # load regression data
 tic("loading data")
-data_all <- readRDS("tmp/raw_data/reg_inputs/reg_table_static.RDS")
+data_all <- readRDS("../tmp/raw_data/reg_inputs/reg_table_static.RDS")
 
 # get control variable names
-cdata <- readRDS("tmp/raw_data/controls/controls_classification.RDS")
+cdata <- readRDS("../tmp/raw_data/controls/controls_classification.RDS")
 controls_char <- cdata[control_type == "return-predictor", var]
 controls_liq <- cdata[control_type == "liquidity", var]
 controls_list <- c(controls_char, controls_liq)
 rm(cdata)
 
 # get names for bmi controls
-tmp <- readRDS("tmp/raw_data/controls/controls_for_BMI.RDS")
+tmp <- readRDS("../tmp/raw_data/controls/controls_for_BMI.RDS")
 controls_bmi <- setdiff(names(tmp), c("yyyymm", "permno"))
 rm(tmp)
 
@@ -89,25 +91,30 @@ p.process_one_type <- function(data, reg_spec = "nonlinear") {
 }
 toc()
 
-# nonlinear specification---
-tic("static panel: nonlinear")
-out_nonlinear <- rbindlist(mclapply(split(data_all, by = "type"), function(x) {
-  p.process_one_type(x, reg_spec = "nonlinear")
-}, mc.cores = nc))
-toc()
+# # nonlinear specification---
+# tic("static panel: nonlinear")
+# out_nonlinear <- rbindlist(mclapply(split(data_all, by = "type"), function(x) {
+#   p.process_one_type(x, reg_spec = "nonlinear")
+# }, mc.cores = nc))
+# toc()
 
-dir.create("tmp/price_impact/regression_contemp/", recursive = T, showWarnings = F)
-saveRDS(out_nonlinear, "tmp/price_impact/regression_contemp/panel_nonlinear.RDS")
+# to_dir <- "../tmp/price_impact/regression_contemp/"
+# dir.create(to_dir, recursive = T, showWarnings = F)
+# saveRDS(out_nonlinear, paste0(to_dir, "panel_nonlinear.RDS"))
 
 # stdev-based specification---
 tic("static panel: stdev")
-out_stdev <- rbindlist(mclapply(split(data_all, by = "type"), function(x) {
+# out_stdev <- rbindlist(mclapply(split(data_all, by = "type"), function(x) {
+#   p.process_one_type(x, reg_spec = "stdev")
+# }, mc.cores = nc))
+out_stdev <- rbindlist(lapply(split(data_all, by = "type"), function(x) {
   p.process_one_type(x, reg_spec = "stdev")
-}, mc.cores = nc))
+}))
 toc()
 
-dir.create("tmp/price_impact/regression_contemp/", recursive = T, showWarnings = F)
-saveRDS(out_stdev, "tmp/price_impact/regression_contemp/panel_stdev.RDS")
+to_dir <- "../tmp/price_impact/regression_contemp/"
+dir.create(to_dir, recursive = T, showWarnings = F)
+saveRDS(out_stdev, paste0(to_dir, "panel_stdev.RDS"))
 
 # # === SANITY check
 

@@ -1,21 +1,23 @@
 # Augmenting 2a_regression_fm.R to also control for chars X bins
 # TODO: merge this into 2a_regression_fm.R at some point
-source("utilities/runmefirst.R")
-source("utilities/regressions.R")
+library(this.path)
+setwd(this.path::this.dir())
+source("../utilities/runmefirst.R")
+source("../utilities/regressions.R")
 
 # load regression data
 tic("load data")
-data_all <- readRDS("tmp/raw_data/reg_inputs/reg_table_static.RDS")
+data_all <- readRDS("../tmp/raw_data/reg_inputs/reg_table_static.RDS")
 
 # get control variable names
-cdata <- readRDS("tmp/raw_data/controls/controls_classification.RDS")
+cdata <- readRDS("../tmp/raw_data/controls/controls_classification.RDS")
 controls_char <- cdata[control_type == "return-predictor", var]
 controls_liq <- cdata[control_type == "liquidity", var]
 controls_list <- c(controls_char, controls_liq)
 rm(cdata)
 
 # get names for bmi controls
-tmp <- readRDS("tmp/raw_data/controls/controls_for_BMI.RDS")
+tmp <- readRDS("../tmp/raw_data/controls/controls_for_BMI.RDS")
 controls_bmi <- setdiff(names(tmp), c("yyyymm", "permno"))
 rm(tmp)
 
@@ -86,11 +88,11 @@ out_stdev <- rbindlist(mclapply(split(data_all, by = "type"), function(x) {
 }, mc.cores = nc))
 toc()
 
-dir.create("tmp/price_impact/regression_contemp/", recursive = T, showWarnings = F)
-saveRDS(out_stdev, "tmp/price_impact/regression_contemp/fm_stdev_substitution.RDS")
+to_dir <- "../tmp/price_impact/regression_contemp/"
+dir.create(to_dir, recursive = T, showWarnings = F)
+saveRDS(out_stdev, paste0(to_dir, "fm_stdev_substitution.RDS"))
 
-
-# # === SANITY check: first few columns the same as earlier?
+# # === SANITY check: same as earlier?
 
 # new <- readRDS("tmp/price_impact/regression_contemp/fm_stdev_substitution.RDS")[spec_idx %in% 1:3]
 # old <- readRDS("tmp/price_impact/regression_contemp/fm_stdev.RDS")

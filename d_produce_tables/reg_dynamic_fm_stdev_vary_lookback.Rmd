@@ -39,6 +39,7 @@ data <- readRDS("../tmp/price_impact/regression_dynamic/fm_stdev.RDS")[!grepl("O
 
 # choose a few specifications
 data <- data[spec_idx == 22]
+data[, se := se_nw]
 data[, c("var_added", "var_type", "se_nw", "nw_lag", "spec_idx") := NULL]
 
 # rank regression specifications

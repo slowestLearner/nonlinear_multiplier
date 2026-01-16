@@ -27,9 +27,11 @@ library(xtable)
 library(stringr)
 library(reshape2)
 library(pracma)
+library(this.path)
+setwd(this.path::this.dir())
 
 # === panel A, regression results
-data = readRDS('../tmp/price_impact/regression_contemp/fm_stdev_substitution.RDS')
+data = readRDS('../tmp/price_impact/regression_contemp/fm_stdev_substitution.RDS')[type != 'OFI_pre_whitened']
 
 # choose specification and variables
 data[, type_idx := ifelse(type == 'BMI', 1, ifelse(type == 'FIT', 2, 3))]

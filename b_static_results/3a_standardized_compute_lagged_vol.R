@@ -1,8 +1,10 @@
 # Compare rolling standard deviations of FIT and OFI
-source("utilities/runmefirst.R")
+library(this.path)
+setwd(this.path::this.dir())
+source("../utilities/runmefirst.R")
 
 # get FIT and OFI data
-data <- readRDS("tmp/raw_data/reg_inputs/all_ofi_and_ret.RDS")
+data <- readRDS("../tmp/raw_data/reg_inputs/all_ofi_and_ret.RDS")
 data <- data[type != "BMI"]
 
 # use up to 12q lags
@@ -45,19 +47,18 @@ data[, spec := as.character(spec)]
 data <- merge(data, unique(data[!is.na(std_ofi), .(yyyymm, permno)]), by = c("yyyymm", "permno"))
 data <- data[yyyymm >= 199303]
 
-dir.create("tmp/raw_data/reg_inputs/", recursive = T, showWarnings = F)
-saveRDS(data, "tmp/raw_data/reg_inputs/quarterly_fit_and_ofi_lagged_rolling_stdev.RDS")
+to_dir <- "../tmp/raw_data/reg_inputs/"
+dir.create(to_dir, recursive = T, showWarnings = F)
+saveRDS(data, paste0(to_dir, "quarterly_fit_and_ofi_lagged_rolling_stdev.RDS"))
 
 
-# === SANITY
+# # === SANITY
 
-# new <- readRDS("tmp/raw_data/reg_inputs/quarterly_fit_and_ofi_lagged_rolling_stdev.RDS")
-# old <- readRDS("../20250117_quarterly/tmp/raw_data/reg_inputs/quarterly_fit_and_ofi_lagged_rolling_stdev.RDS")
-# old <- old[type != "OFI"]
-# old[type == "OFI_resid", type := "OFI"]
+# new <- readRDS("../tmp/raw_data/reg_inputs/quarterly_fit_and_ofi_lagged_rolling_stdev.RDS")
+# old <- readRDS("../../20250117_quarterly/tmp/raw_data/reg_inputs/quarterly_fit_and_ofi_lagged_rolling_stdev.RDS")
+# old[type == "OFI_resid", type := "OFI_pre_whitened"]
 
 # new <- new[0 == rowSums(is.na(new))]
 # old <- old[0 == rowSums(is.na(old))]
-# dim(new) == dim(old)
-# compare <- merge(new, old, by = c("yyyymm", "permno", "type", "spec"), all = T)
-# compare[, cor(std_ofi.x, std_ofi.y)]
+# compare <- merge(new, old, by = c("yyyymm", "permno", "type", "spec"))
+# compare[, cor(std_ofi.x, std_ofi.y), type]
