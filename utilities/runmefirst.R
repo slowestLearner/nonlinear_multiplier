@@ -17,6 +17,7 @@ library(sandwich)
 library(styler)
 showtext_auto()
 library(data.table)
+library(future.apply)
 
 # num of cores
 nc <- detectCores() - 2

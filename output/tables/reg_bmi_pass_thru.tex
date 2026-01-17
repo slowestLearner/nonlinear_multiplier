@@ -1,0 +1,29 @@
+% latex table generated in R 4.4.1 by xtable 1.8-4 package
+% Fri Jan 16 16:36:15 2026
+\begin{tabular}{lccc}
+  \hline \multicolumn{4}{c}{Panel A: BMI pass-through regression} \\
+ \hline
+                                    & \multicolumn{3}{c}{Dependent variable: $\Delta \text{IO}_{n,t}$} \\
+
+                                    \cmidrule(l){2-4} 
+  \vspace{5pt} & (1) & (2) & (3) \\ 
+  $M_{|d_{n,t}| < \sigma}$ & $1.50^{***}$ & $1.36^{***}$ & $1.19^{**}$ \\ 
+   & $(0.47)$ & $(0.47)$ & $(0.47)$ \\ 
+  $M_{|d_{n,t}| \in [\sigma, 2\sigma]}$ & $1.77^{***}$ & $1.63^{***}$ & $1.48^{***}$ \\ 
+   & $(0.47)$ & $(0.47)$ & $(0.47)$ \\ 
+  $M_{|d_{n,t}| > 2 \sigma}$ & $1.42^{***}$ & $1.34^{***}$ & $1.26^{***}$ \\ 
+   \vspace{5pt} & $(0.47)$ & $(0.47)$ & $(0.47)$ \\ 
+  \citet{pavlova2023benchmarking} controls & Y & Y & Y \\ 
+  Predictor controls & N & Y & Y \\ 
+   \vspace{5pt}Liquidity controls & N & N & Y \\ 
+  Obs & 9,565 & 9,565 & 9,565 \\ 
+  $R^2$ & $0.067$ & $0.113$ & $0.149$ \\ 
+   \hline \multicolumn{4}{c}{Panel B: Coefficient differences} \\
+ \hline$M_{|d_{n,t}| \in [\sigma, 2\sigma]} - M_{|d_{n,t}| > 2 \sigma}$ & $0.36$ & $0.30$ & $0.23$ \\ 
+   & $(0.51)$ & $(0.49)$ & $(0.48)$ \\ 
+  $M_{|d_{n,t}| < \sigma} - M_{|d_{n,t}| \in [\sigma, 2\sigma]}$ & $-0.27$ & $-0.27$ & $-0.29$ \\ 
+   & $(0.60)$ & $(0.63)$ & $(0.61)$ \\ 
+  $M_{|d_{n,t}| < \sigma} - M_{|d_{n,t}| > 2 \sigma}$ & $0.09$ & $0.03$ & $-0.06$ \\ 
+   & $(0.66)$ & $(0.64)$ & $(0.64)$ \\ 
+   \hline 
+\end{tabular}

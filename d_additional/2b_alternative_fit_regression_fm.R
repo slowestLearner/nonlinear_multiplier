@@ -1,12 +1,20 @@
-# Contemporaneous regression of returns on demand: panel regressions
+# Contemporaneous regression of returns on demand
 library(this.path)
 setwd(this.path::this.dir())
 source("../utilities/runmefirst.R")
 source("../utilities/regressions.R")
 
-# load regression data
-tic("loading data")
-data_all <- readRDS("../tmp/raw_data/reg_inputs/reg_table_static.RDS")
+# swap FIT in these with new data
+data <- readRDS("../tmp/raw_data/reg_inputs/reg_table_static.RDS")[type == "FIT"][, type := NULL]
+vv <- names(data)
+vv <- vv[grepl("ofi", vv)]
+data[, c(vv, "bin") := NULL]
+
+# now get new FIT data
+tmp <- readRDS("../../../data/demand_shocks/j_fit/quarterly_residuals.RDS")[, .(yyyymm, permno, origin, type = flow_type, ofi = fit2shrout_cut01)]
+tmp[, type := as.character(type)]
+data <- merge(data, tmp, by = c("yyyymm", "permno"), allow.cartesian = T)
+rm(tmp)
 
 # get control variable names
 cdata <- readRDS("../tmp/raw_data/controls/controls_classification.RDS")
@@ -20,9 +28,20 @@ tmp <- readRDS("../tmp/raw_data/controls/controls_for_BMI.RDS")
 controls_bmi <- setdiff(names(tmp), c("yyyymm", "permno"))
 rm(tmp)
 
+# get bins again
+data[, sd_ofi := sd(ofi), .(yyyymm, origin, type)]
+data[, bin := 1]
+data[abs(ofi) > sd_ofi, bin := 2]
+data[abs(ofi) > 2 * sd_ofi, bin := 3]
+data[, ofi_bin1 := ifelse(bin == 1, ofi, 0)]
+data[, ofi_bin2 := ifelse(bin == 2, ofi, 0)]
+data[, ofi_bin3 := ifelse(bin == 3, ofi, 0)]
+data[, sd_ofi := NULL]
+data_all <- copy(data)
+rm(data)
 
 # ###########################################################
-# Estimation, with nonlinear or stdev-based specification
+# Fama-MacBeth with nonlinear or stdev-based specification
 # ###########################################################
 
 # control variables for different specifications
@@ -35,12 +54,12 @@ control_formulas <- c(
 # process one type of data. reg_spec = "nonlinear" or "stdev"
 p.process_one_type <- function(data, reg_spec = "nonlinear") {
   this_type <- data[1, type]
+  this_origin <- data[1, origin]
 
   out_all <- data.table() # save all results here
 
   # introduce direct controls
   for (spec_idx in 1:length(control_formulas)) {
-    # print(paste0("this_type = ", this_type, " spec_idx = ", spec_idx))
     ff_no_ofi <- paste0("ret ~ ", control_formulas[spec_idx])
     if (reg_spec == "nonlinear") {
       ff <- paste0("ret ~ ", control_formulas[spec_idx], " + ofi + ofi_absofi")
@@ -51,8 +70,9 @@ p.process_one_type <- function(data, reg_spec = "nonlinear") {
       ff <- paste0(ff, "+", paste0(controls_bmi, collapse = "+"))
       ff_no_ofi <- paste0(ff_no_ofi, "+", paste0(controls_bmi, collapse = "+"))
     }
-    out <- p.panel_regression(data, ff, compare_coefs = ifelse(reg_spec == "nonlinear", FALSE, TRUE))
-    out_no_ofi <- p.panel_regression(data, ff_no_ofi, compare_coefs = FALSE)
+    out <- p.fama_macbeth(data, ff, compare_coefs = ifelse(reg_spec == "nonlinear", FALSE, TRUE))
+    out_no_ofi <- p.fama_macbeth(data, ff_no_ofi, compare_coefs = FALSE)
+
     out[, r2_no_ofi := out_no_ofi[1, r2]]
     out[, spec_idx := spec_idx]
     out_all <- rbind(out_all, out)
@@ -66,10 +86,9 @@ p.process_one_type <- function(data, reg_spec = "nonlinear") {
     ff <- paste0(ff, " + ofi_", this_v)
     ff_no_ofi <- paste0(ff_no_ofi, " + ofi_", this_v)
     spec_idx <- spec_idx + 1
-    # print(paste0("this_type = ", this_type, " spec_idx = ", spec_idx))
 
-    out <- p.panel_regression(data, ff, compare_coefs = ifelse(reg_spec == "nonlinear", FALSE, TRUE))
-    out_no_ofi <- p.panel_regression(data, ff_no_ofi, compare_coefs = FALSE)
+    out <- p.fama_macbeth(data, ff, compare_coefs = ifelse(reg_spec == "nonlinear", FALSE, TRUE))
+    out_no_ofi <- p.fama_macbeth(data, ff_no_ofi, compare_coefs = FALSE)
     out[, r2_no_ofi := out_no_ofi[1, r2]]
     out[, spec_idx := spec_idx]
     out_all <- rbind(out_all, out)
@@ -86,13 +105,14 @@ p.process_one_type <- function(data, reg_spec = "nonlinear") {
   )
   out_all <- merge(out_all, tmp, by = "spec_idx", all.x = T)
   out_all[, type := this_type]
+  out_all[, origin := this_origin]
 
   return(out_all)
 }
-toc()
+
 
 # # nonlinear specification---
-# tic("static panel: nonlinear")
+# tic("static fm: nonlinear")
 # out_nonlinear <- rbindlist(mclapply(split(data_all, by = "type"), function(x) {
 #   p.process_one_type(x, reg_spec = "nonlinear")
 # }, mc.cores = nc))
@@ -100,44 +120,64 @@ toc()
 
 # to_dir <- "../tmp/price_impact/regression_contemp/"
 # dir.create(to_dir, recursive = T, showWarnings = F)
-# saveRDS(out_nonlinear, paste0(to_dir, "panel_nonlinear.RDS"))
+# saveRDS(out_nonlinear, paste0(to_dir, "fm_nonlinear.RDS"))
 
 # stdev-based specification---
-tic("static panel: stdev")
-out_stdev <- rbindlist(mclapply(split(data_all, by = "type"), function(x) {
+# tic("static fm: stdev")
+# out_stdev <- rbindlist(mclapply(split(data_all, by = c("type", "origin")), function(x) {
+#   p.process_one_type(x, reg_spec = "stdev")
+# }, mc.cores = nc))
+# toc()
+
+# takes 6 mins
+tic("parallel processing: stdev specification")
+plan(multisession, workers = detectCores() - 2)
+out_stdev <- rbindlist(future_lapply(split(data_all, by = c("type", "origin")), function(x) {
   p.process_one_type(x, reg_spec = "stdev")
-}, mc.cores = nc))
+}, future.packages = c("data.table"), future.seed = 123))
+plan(sequential)
 toc()
 
-to_dir <- "../tmp/price_impact/regression_contemp/"
+# # take a look at results
+# tt <- copy(out_stdev[spec_idx == 3 & origin == "flow"])
+# tt <- tt[grepl("ofi", var)]
+# tt2 <- unique(tt[, .(var)])[, var_idx := .I]
+# tt2[, var_lab := paste0(var_idx, "_", var)]
+# tt <- merge(tt, tt2, by = "var")
+# rm(tt2)
+# tt[, tstat := coef / se]
+
+# tt2 <- unique(tt[, .(type)])
+# tt2[, type_lab := paste0(.I, "_", type)]
+# tt <- merge(tt, tt2, by = "type")
+# rm(tt2)
+
+# options(width = 300)
+# dcast(tt, var_lab ~ type_lab, value.var = c("coef"))
+# dcast(tt, var_lab ~ type_lab, value.var = c("tstat"))
+
+to_dir <- "../tmp/price_impact/regression_contemp/alternative_fit/"
 dir.create(to_dir, recursive = T, showWarnings = F)
-saveRDS(out_stdev, paste0(to_dir, "panel_stdev.RDS"))
+saveRDS(out_stdev, paste0(to_dir, "fm_stdev.RDS"))
 
 # # === SANITY check
 
-# # --- nonlinear (small differences)
-# new <- readRDS("tmp/price_impact/regression_contemp/panel_nonlinear.RDS")
-# old <- readRDS("../20250117_quarterly/tmp/price_impact/regression_contemp/full_sample_panel.RDS")
+# # --- nonlinear
+# new <- readRDS("tmp/price_impact/regression_contemp/fm_nonlinear.RDS")
+# old <- readRDS("../20250117_quarterly/tmp/price_impact/regression_contemp/full_sample.RDS")
 # old <- old[type != "OFI"]
 # old[type == "OFI_resid", type := "OFI"]
-#
-# # get overlapping part
-# new <- new[spec_idx %in% 1:3]
+# setnames(old, "idx", "spec_idx")
+
+# # get joint variables
 # vv <- intersect(names(new), names(old))
 # new <- new[, ..vv]
 # old <- old[, ..vv]
 # rm(vv)
-# stopifnot(dim(new) == dim(old))
-#
-# # convert coef units
-# old[var == "ofi_absofi", coef := coef * 100]
-# old[var == "ofi_absofi", se := se * 100]
-#
+
 # # compare
 # compare <- merge(new, old, by = c("type", "var", "spec_idx"), all = T)
-# stopifnot(nrow(compare) == nrow(new))
 # rm(new, old)
-#
 # compare[, mean(abs(coef.x - coef.y)) / mean(abs(coef.x))]
 # compare[, mean(abs(se.x - se.y)) / mean(abs(se.x))]
 # compare[, mean(abs(obs.x - obs.y)) / mean(abs(obs.x))]
@@ -145,34 +185,28 @@ saveRDS(out_stdev, paste0(to_dir, "panel_stdev.RDS"))
 # compare[, mean(abs(r2_no_ofi.x - r2_no_ofi.y)) / mean(abs(r2_no_ofi.x))]
 
 
-# # --- stdev (no problem)
-# new <- readRDS("tmp/price_impact/regression_contemp/panel_stdev.RDS")
-# old <- readRDS("../20250117_quarterly/tmp/price_impact/regression_contemp/full_sample_panel_with_stdev_bins.RDS")
+# --- stdev
+# new <- readRDS("tmp/price_impact/regression_contemp/fm_stdev.RDS")
+# old <- readRDS("../20250117_quarterly/tmp/price_impact/multiplier_by_shock_size_quarterly/fm_by_stdev_based_bins.RDS")
 # old <- old[type != "OFI"]
 # old[type == "OFI_resid", type := "OFI"]
-#
-# # get overlapping part
-# new <- new[spec_idx %in% 1:3]
-#
+# setnames(old, "idx", "spec_idx")
+
 # # get joint variables
-# new[, var := gsub("ofi_bin", "M", var)]
-# new[, var := gsub(" ", "", var)]
-# common_vars <- intersect(unique(new[, var]), unique(old[, var]))
-# new <- new[var %in% common_vars]
-# old <- old[var %in% common_vars]
-# rm(common_vars)
-#
 # vv <- intersect(names(new), names(old))
 # new <- new[, ..vv]
 # old <- old[, ..vv]
 # rm(vv)
-# stopifnot(dim(new) == dim(old))
-#
+
+# # rename variables to compare
+# new <- new[grepl("ofi_bin", var)]
+# new[, var := gsub("ofi_bin", "M", var)]
+# new[, var := gsub(" ", "", var)]
+# stopifnot(nrow(new) == nrow(old))
+
 # # compare
 # compare <- merge(new, old, by = c("type", "var", "spec_idx"), all = T)
-# stopifnot(nrow(compare) == nrow(new))
 # rm(new, old)
-#
 # compare[, mean(abs(coef.x - coef.y)) / mean(abs(coef.x))]
 # compare[, mean(abs(se.x - se.y)) / mean(abs(se.x))]
 # compare[, mean(abs(obs.x - obs.y)) / mean(abs(obs.x))]

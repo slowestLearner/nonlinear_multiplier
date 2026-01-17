@@ -17,12 +17,6 @@ editor_options:
   chunk_output_type: console
 ---
 
-```{r setoptions, echo = FALSE, warning=FALSE}
-library(knitr)
-setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
-```
-
-
 ```{r, echo = FALSE, results = 'asis', warning=FALSE, message=FALSE}
 rm(list = ls())
 options(xtable.comment = FALSE)
@@ -33,10 +27,11 @@ library(scales)
 library(tidyr)
 library(xtable)
 library(pracma)
+library(this.path)
+setwd(this.path::this.dir())
 
 # read data
-# data = readRDS('../../tmp/price_impact/regression_with_lagged_interaction/fm_quarterly_without_direction.RDS')
-data <- readRDS("../tmp/price_impact/regression_dynamic/fm_nonlinear.RDS")
+data <- readRDS("../tmp/price_impact/regression_dynamic/fm_nonlinear.RDS")[!grepl("OFI_pre_whitened", type)]
 
 # choose specifications
 data <- data[spec_idx == 3][, c("spec_idx", "var_added", "var_type") := NULL]
