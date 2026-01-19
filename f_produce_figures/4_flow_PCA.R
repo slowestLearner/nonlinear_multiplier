@@ -22,7 +22,7 @@ rm(tmp)
 this_var <- "FIT"
 pp <- ggplot(data[var == this_var], aes(x = flow_raw, y = flow_mean, color = reorder(type_lab, num_pcs))) +
     geom_line(lwd = 1) +
-    geom_point(cex = 2) +
+    geom_point(cex = 1) +
     theme_classic() +
     theme(legend.position = c(.2, .8)) +
     labs(x = "Original FIT", y = "PC-removed FIT") +
