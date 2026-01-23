@@ -94,13 +94,11 @@ reg_tbl <- bind_rows(est, se) %>%
 rm(est, se)
 
 # note controls
-ctrls <- data.table(var_lab = "Direct controls", t(rep(c("Y", "Y", "Y"), 3)))
+ctrls <- data.table(var_lab = "Predictor controls", t(rep(c("Y", "Y", "Y"), 3)))
+ctrls <- rbind(ctrls, data.table(var_lab = "Liquidity controls", t(rep(c("Y", "Y", "Y"), 3))))
 ctrls <- rbind(ctrls, data.table(var_lab = "Interacted: predictors", t(rep(c("N", "Y", "Y"), 3))))
-
-# <--- adding these lines lead to errors
 ctrls <- rbind(ctrls, data.table(var_lab = "Interacted: liquidity", t(rep(c("N", "N", "Y"), 3))))
-ctrls[, group_id := 300 + 1:3]
-# < --
+ctrls[, group_id := 300 + nrow(ctrls)]
 
 ctrls[, type := ""]
 names(ctrls) <- names(reg_tbl)
@@ -178,7 +176,7 @@ align_vactor <- paste0("ll", paste0(rep("c", times = ncol(tbl) - 1), collapse = 
 x.side <- xtable(tbl, align = align_vactor)
 
 this_add_to_row <- list(
-  pos = list(-1, 6, 9, 13, 19),
+  pos = list(-1, 6, 10, 14, nrow(tbl)),
   command = c(
     "\\hline \\multicolumn{10}{c}{Panel A: price impact regressions} \\\\\n \\hline
                                     & \\multicolumn{9}{c}{Dependent variable: stock return $r_{n,t}$} \\\\\n

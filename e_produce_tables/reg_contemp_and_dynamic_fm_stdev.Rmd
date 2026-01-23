@@ -161,7 +161,6 @@ reg_tbl <- bind_rows(reg_tbl, obs_and_r2) %>%
   select(-type, -group_id)
 
 
-
 # ==============================================================================
 # PANEL B: COEFFICIENT COMPARISONS
 # ==============================================================================
@@ -248,14 +247,17 @@ x_table <- xtable(tbl, align = align_vector)
 
 # Define LaTeX formatting commands
 latex_commands <- list(
-  pos = list(-1, 1, 1, 17, nrow(tbl)),
+  pos = list(
+    -1, 1,
+    10, 14, 17, 18, nrow(tbl)
+  ),
   command = c(
     "\\hline \\multicolumn{9}{c}{Panel A: price impact regressions} \\\\\n \\hline
     & \\multicolumn{8}{c}{Dependent variable: stock return $r_{n,t}$} \\\\\n
-    \\cmidrule(l){2-9} $d_{n,t} = $ & \\multicolumn{4}{c}{FIT} & \\multicolumn{4}{c}{OFI} \\\\\n \\cmidrule(l){2-5} \\cmidrule(l){6-9} \n",
-    "\\cmidrule(l){2-5} \\cmidrule(l){6-9}",
-    rep("\\vspace{5pt}", 1),
+    \\cmidrule(l){2-9} $d_{n,t} = $ & \\multicolumn{4}{c}{FIT} & \\multicolumn{4}{c}{OFI} \\\\\n \\cmidrule(l){2-5} \\cmidrule(l){6-9}\n",
+    rep("\\vspace{5pt}", 3),
     "\\hline \\multicolumn{9}{c}{Panel B: Coefficient differences} \\\\\n \\hline",
+    rep("\\vspace{5pt}", 1),
     "\\hline \n"
   )
 )
