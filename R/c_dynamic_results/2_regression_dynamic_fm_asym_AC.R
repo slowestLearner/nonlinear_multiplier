@@ -4,6 +4,8 @@ setwd(this.path::this.dir())
 source("../utilities/runmefirst.R")
 source("../utilities/regressions.R")
 
+pos_neg_suffix = 'neg'
+
 # load regression data
 tic("Loading regression data")
 data <- readRDS("../tmp/raw_data/reg_inputs/reg_table_dynamic.RDS")
@@ -18,7 +20,7 @@ data_controls <- data[, c(vars_id, vars_controls), with = F]
 setnames(data_controls, "type", "demand_type")
 
 data_reg <- data[, c(vars_id, vars_reg), with = F]
-data_reg <- melt(data_reg, id.vars = c("yyyymm", "permno", "type", "ret", "ofi"), variable.name = "hor", value.name = "cumofi_lag")
+data_reg <- data.table::melt(data_reg, id.vars = c("yyyymm", "permno", "type", "ret", "ofi"), variable.name = "hor", value.name = "cumofi_lag")
 data_reg <- data_reg[0 == rowSums(is.na(data_reg))]
 data_reg[, hor := as.integer(gsub("cumofi_", "", hor))]
 rm(data, vars_id, vars_reg, vars_controls)
@@ -26,6 +28,16 @@ rm(data, vars_id, vars_reg, vars_controls)
 # change the name so old code can easily be applied
 data_reg[, demand_type := type]
 data_reg[, type := paste0(demand_type, "_", hor, "lag")]
+
+if (pos_neg_suffix == "neg") {
+  data_reg[, ofi := fifelse(ofi < 0, ofi, 0)]
+} else if (pos_neg_suffix == "pos") {
+  data_reg[, ofi := fifelse(ofi > 0, ofi, 0)]
+} else {
+  stop("pos_neg_suffix must be 'pos' or 'neg'")
+}
+
+
 data_reg[, sd_ofi := sd(cumofi_lag), .(yyyymm, type)]
 data_reg[, bin := 1]
 data_reg[abs(cumofi_lag) > sd_ofi, bin := 2]
@@ -136,20 +148,20 @@ out_stdev <- merge(out_stdev, sd_data, by = "type")
 rm(sd_data)
 
 # # --- take a look at results
-# out <- out_stdev[spec_idx == 3]
-# out <- out[grepl("ofi", var)]
-# tt <- unique(out[, .(var)])[, var_idx := .I][, var_lab := paste0(var_idx, "_", var)]
-# out <- merge(out, tt, by = "var")
-# rm(tt)
-# out[, type_lab := paste0(type, "_", spec_idx)]
-# out[, tstat := coef / se]
-# out <- out[grepl("OFI", type)]
-# dcast(out, var_lab ~ type, value.var = c("coef"))
-# dcast(out, var_lab ~ type, value.var = c("tstat"))
+out <- out_stdev[spec_idx == 3]
+out <- out[grepl("ofi", var)]
+tt <- unique(out[, .(var)])[, var_idx := .I][, var_lab := paste0(var_idx, "_", var)]
+out <- merge(out, tt, by = "var")
+rm(tt)
+out[, type_lab := paste0(type, "_", spec_idx)]
+out[, tstat := coef / se]
+out <- out[grepl("OFI", type)]
+dcast(out, var_lab ~ type, value.var = c("coef"))
+dcast(out, var_lab ~ type, value.var = c("tstat"))
 
 to_dir <- "../tmp/price_impact/regression_dynamic/"
 dir.create(to_dir, recursive = T, showWarnings = F)
-saveRDS(out_stdev, paste0(to_dir, "fm_stdev.RDS"))
+saveRDS(out_stdev, paste0(to_dir, "fm_stdev_asym_", pos_neg_suffix  ,".RDS"))
 toc()
 
 
