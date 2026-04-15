@@ -3314,6 +3314,32 @@
       "NeedsCompilation": "no",
       "Repository": "CRAN"
     },
+    "softImpute": {
+      "Package": "softImpute",
+      "Version": "1.4-3",
+      "Source": "Repository",
+      "Type": "Package",
+      "Title": "Matrix Completion via Iterative Soft-Thresholded SVD",
+      "Date": "2025-05-12",
+      "Authors@R": "c(person(\"Trevor\", \"Hastie\", role=c(\"aut\", \"cre\"), email = \"hastie@stanford.edu\"), person(\"Rahul\", \"Mazumder\", role=c(\"aut\"), email = \"rahul.mazumder@gmail.com\"), person(\"Balasubramanian\", \"Narasimhan\", role=c(\"ctb\"), email = \"naras@stanford.edu\"))",
+      "Description": "Iterative methods for matrix completion that use nuclear-norm regularization. There are two main approaches.The one approach uses iterative soft-thresholded svds to impute the missing values. The second approach uses alternating least squares. Both have an 'EM' flavor, in that at each iteration the matrix is completed with the current estimate. For large matrices there is a special sparse-matrix class named \"Incomplete\" that efficiently handles all computations. The package includes procedures for centering and scaling rows, columns or both, and for computing low-rank SVDs on large sparse centered matrices (i.e. principal components).",
+      "License": "GPL-2",
+      "Encoding": "UTF-8",
+      "RoxygenNote": "7.3.2",
+      "VignetteBuilder": "knitr",
+      "Suggests": [
+        "knitr",
+        "rmarkdown"
+      ],
+      "Depends": [
+        "Matrix",
+        "methods"
+      ],
+      "NeedsCompilation": "yes",
+      "Author": "Trevor Hastie [aut, cre], Rahul Mazumder [aut], Balasubramanian Narasimhan [ctb]",
+      "Maintainer": "Trevor Hastie <hastie@stanford.edu>",
+      "Repository": "CRAN"
+    },
     "stringi": {
       "Package": "stringi",
       "Version": "1.8.7",

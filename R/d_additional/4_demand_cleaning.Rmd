@@ -1,0 +1,199 @@
+---
+  output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+Clean up FIT and OFI measures
+========================================================
+Jiacui Li
+
+```{r setoptions, echo = FALSE, warning=FALSE}
+library(knitr)
+source("runmefirst.R")
+opts_chunk$set(echo = TRUE, results = "markup", cache = TRUE)
+```
+
+=== FIT part: Code adpated from 13_main_result_robustness/4_careful_fit.Rmd
+
+Put together regression table. I think I still need position relative to market for plotting. 
+
+```{r}
+# source('~/.runmefirst')
+
+# all trades
+ff <- list.files("~/Desktop/J-Leaves/data/institutions/13f/processed/s12/holdings_first_fdate_for_each_rdate/quarterly_trades", full.names = T)
+data <- rbindlist(mclapply(ff, readRDS, mc.cores = nc))
+rm(ff)
+gc()
+
+# change names, clean
+setnames(data, c("prc_tfn_1", "shrout_tfn_1"), c("prc_1", "shrout_1"))
+data[, ncusip := NULL]
+data <- data[!is.na(permno)]
+data <- data[!is.na(prc_1) & !is.na(shrout_1)]
+
+# just common stocks
+tmp <- readRDS("../../data/stocks/prices/quarterly_return.RDS")
+tmp <- tmp[, .(yyyymm, permno)]
+data <- merge(data, tmp, by = c("yyyymm", "permno"))
+rm(tmp)
+
+# require having data in the right periods
+tmp <- unique(data[, .(yyyymm, wficn, rdate_1, rdate)])
+tmp <- merge(tmp, tmp[, .(rdate_1_max = max(rdate_1), rdate_max = max(rdate)), yyyymm], by = "yyyymm")
+tmp <- tmp[(rdate_1 == rdate_1_max) & (rdate == rdate_max), .(yyyymm, wficn)]
+data <- merge(data, tmp, by = c("yyyymm", "wficn"))
+rm(tmp)
+data[, c("rdate", "rdate_1") := NULL]
+
+# sanity checks on position sizes
+cut <- .2
+data[shares_1 / shrout_1 > cut, shares_1 := shrout_1 * cut]
+data[shares / shrout_1 > cut, shares := shrout_1 * cut]
+rm(cut)
+
+# merge with quarterly fund flow. Require to be domestic equity
+tmp <- readRDS("~/Desktop/J-Leaves/data/institutions/crspMutual/processed/fund_flows/all_fund_flows/quarterly_by_wficn/202405.RDS")
+tmp <- tmp[obj2 == "ED"]
+tmp <- tmp[, .(yyyymm, wficn, tna_1, flow)]
+
+# holdings-implied sizes cannot differ by too much (check match quality)
+tt <- data[, .(aum_1 = sum(shares_1 * prc_1)), .(yyyymm, wficn)]
+tmp <- merge(tmp, tt, by = c("yyyymm", "wficn"))
+rm(tt)
+tmp[, size_ratio := aum_1 / tna_1]
+tmp <- tmp[(size_ratio >= .8) & (size_ratio <= 1.2)]
+tmp <- tmp[, .(yyyymm, wficn, flow)]
+data <- merge(data, tmp, by = c("yyyymm", "wficn"))
+rm(tmp)
+
+# fund can't have too few obs or be too small
+tmp <- data[, list(obs = sum(shares_1 > 0), aum_1 = sum(shares_1 * prc_1)), list(yyyymm, wficn)]
+tmp <- tmp[(obs >= 20) & (aum_1 >= 10)]
+tmp[, obs := NULL]
+data <- merge(data, tmp, by = c("yyyymm", "wficn"))
+rm(tmp)
+
+# get portfolio and market-implied weights
+data[shares_1 > 0, w_1 := prc_1 * shares_1 / aum_1]
+data <- merge(data, data[shares_1 > 0, .(xx = sum(prc_1 * shrout_1)), .(yyyymm, wficn)], by = c("yyyymm", "wficn"))
+data[shares_1 > 0, w_mkt_1 := prc_1 * shrout_1 / xx]
+data[, xx := NULL]
+
+# data quality: fund cannot be too concentrated
+cut <- .4
+tmp <- data[w_1 > 0, list(max_w_1 = max(w_1), max_w_mkt_1 = max(w_mkt_1)), list(yyyymm, wficn)]
+tmp <- tmp[(max_w_1 < cut) & (max_w_mkt_1 < cut)]
+tmp[, c("max_w_1", "max_w_mkt_1") := NULL]
+data <- merge(data, tmp, by = c("yyyymm", "wficn"))
+rm(tmp)
+gc()
+
+# within each fund, sort by positions or position relative to market into 20 bins. Takes a min
+tmp <- unique(data[, .(yyyymm, wficn)])
+tmp[, idx := 1:nrow(tmp)]
+data <- merge(data[, idx := NULL], tmp, by = c("yyyymm", "wficn"))
+
+p.get_one <- function(this_idx) {
+  out <- copy(data[idx == this_idx])
+
+  out[w_1 > 0, bin := ntile(w_1, 20)]
+  out[w_1 > 0, bin_to_mkt := ntile(w_1 - w_mkt_1, 20)]
+  out[w_1 == 0, c("bin", "bin_to_mkt") := NA]
+  return(out)
+}
+
+blocks <- 10
+tmp[, block_idx := ntile(idx, blocks)]
+
+out <- data.table()
+for (i in 1:blocks) {
+  print(i / blocks)
+  tic()
+  out <- rbind(out, rbindlist(mclapply(tmp[block_idx == i, idx], p.get_one, mc.cores = nc)))
+  gc()
+  toc()
+}
+stopifnot(nrow(out) == nrow(data))
+data <- copy(out)
+rm(out, tmp, blocks, i, p.get_one)
+data[, idx := NULL]
+
+# put into easier-to-use formats
+data[, dw := (shares - shares_1) * prc_1 / aum_1]
+data[, dw := Winsorize(dw, val = quantile(dw, probs = c(.0001, .9999)))]
+data[, c("shares", "shares_1", "prc_1", "shrout_1") := NULL]
+
+dir.create("tmp/raw_data/cleaning/fit/", recursive = T)
+saveRDS(data, "tmp/raw_data/cleaning/fit/trade_and_flow_regression_table.RDS")
+```
+
+Estimate heterogeneous trading response to flows. 
+
+```{r}
+# source('~/.runmefirst')
+
+data <- readRDS("tmp/raw_data/cleaning/fit/trade_and_flow_regression_table.RDS")
+
+# sort flows into bins
+n_bins <- 20
+cut <- .01
+tmp <- data[, .(flow = last(flow)), .(yyyymm, wficn)]
+tmp[abs(flow) < cut, bin_flow := 0]
+tmp[flow > cut, bin_flow := ntile(flow, n_bins)]
+tmp[flow < -cut, bin_flow := ntile(flow, n_bins) - (n_bins + 1)]
+tmp[, flow := NULL]
+data <- merge(data[, bin_flow := NULL], tmp, by = c("yyyymm", "wficn"))
+rm(tmp)
+
+# get flow-size bins
+data[, bin_composite := paste0(bin, "_", bin_flow)]
+gc()
+
+# main LHS variable (trade)
+data[w_1 > 0, dw_to_w_1 := dw / w_1]
+data[, dw_to_w_1 := Winsorize(dw_to_w_1, val = quantile(dw_to_w_1, probs = c(.005, .995), na.rm = T))]
+
+# # == first show that pre-existing positions matter
+# tmp = data[w_1 > 0, .(w_1 = mean(w_1), w_mkt_1 = mean(w_mkt_1),
+#                dw_to_w_1 = mean(dw_to_w_1)), bin_to_mkt]
+# ggplot(tmp, aes(x = w_1 - w_mkt_1, y = dw_to_w_1)) + geom_line() + geom_hline(yintercept = 0, lty = 3)
+
+# == first step
+
+ols <- feols(dw_to_w_1 ~ 1 | bin, data[w_1 > 0], weights = data[w_1 > 0, w_1], cluster = c("yyyymm", "wficn"))
+data[(w_1 > 0) & !is.na(dw_to_w_1), dw_to_w_1_resid := ols$residuals]
+
+# == second step
+
+ols <- feols(dw_to_w_1_resid ~ 1 | bin_composite, data[w_1 > 0], weights = data[w_1 > 0, w_1], cluster = c("yyyymm", "wficn"))
+ff <- fixef(ols)
+
+out <- data.table(vv = names(ff$bin_composite), coef = ff$bin_composite)
+out[, loc := sapply(vv, function(x) {
+  gregexpr("_", x)[[1]][1]
+})]
+out[, bin := as.integer(substr(vv, 1, loc - 1))]
+out[, bin_flow := as.integer(substr(vv, loc + 1, nchar(vv)))]
+out[, c("vv", "loc") := NULL]
+out[, lab := paste0("w_1 bin = ", bin)]
+rm(ff, ols)
+
+# merge with flow sizes and position sizes
+tt <- data[, .(flow = mean(flow), w_1 = mean(w_1)), .(bin, bin_flow)]
+out <- merge(out, tt, by = c("bin", "bin_flow"))
+rm(tt)
+
+out <- merge(out, out[, .(w_1_mean = mean(w_1)), bin], by = "bin")
+out[, lab := paste0("w_1 = ", round(w_1_mean * 100, 2), "%")]
+
+saveRDS(out, "tmp/raw_data/cleaning/fit/heterogeneous_trade_to_flow.RDS")
+
+# ggplot(out, aes(x = flow, y = coef, fill = reorder(lab, bin))) +
+#   geom_line(aes(color = reorder(lab, bin)), lwd = 1) +
+#   theme_classic() +
+#   geom_hline(yintercept = 0, lty = 3) + geom_vline(xintercept = 0, lty = 3) +
+#   geom_abline(slope = 1, intercept = 0, lty = 3) + theme_classic() +
+#   theme(legend.title = element_blank()) +
+#   labs(x = 'flow', y = 'trade')
+```

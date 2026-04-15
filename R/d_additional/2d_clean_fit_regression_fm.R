@@ -1,18 +1,20 @@
-# Contemporaneous regression of returns on demand
+# Contemporaneous regression of returns on demand, for alternative FIT constructions
 library(this.path)
 setwd(this.path::this.dir())
 source("../utilities/runmefirst.R")
 source("../utilities/regressions.R")
 
-# swap FIT in these with new data
+# static regression table: swap FIT in these with new data
 data <- readRDS("../tmp/raw_data/reg_inputs/reg_table_static.RDS")[type == "FIT"][, type := NULL]
+
+# remove existing demand variables
 vv <- names(data)
 vv <- vv[grepl("ofi", vv)]
 data[, c(vv, "bin") := NULL]
 
-# now get new FIT data
-tmp <- readRDS("../../../data/demand_shocks/j_fit/quarterly_residuals.RDS")[, .(yyyymm, permno, origin, type = flow_type, ofi = fit2shrout_cut01)]
-tmp[, type := as.character(type)]
+# append new FIT data
+# tmp <- readRDS("../../../data/demand_shocks/j_fit/quarterly_residuals.RDS")[, .(yyyymm, permno, origin, type = flow_type, ofi = fit2shrout_cut01)]
+tmp <- readRDS("../tmp/additional/clean_fit/flow_residuals/2_fit.RDS")[, .(yyyymm, permno, type = flow_type, ofi = fit2shrout_cut01)]
 data <- merge(data, tmp, by = c("yyyymm", "permno"), allow.cartesian = T)
 rm(tmp)
 
@@ -28,8 +30,8 @@ tmp <- readRDS("../tmp/raw_data/controls/controls_for_BMI.RDS")
 controls_bmi <- setdiff(names(tmp), c("yyyymm", "permno"))
 rm(tmp)
 
-# get bins again
-data[, sd_ofi := sd(ofi), .(yyyymm, origin, type)]
+# create bins again based on new FIT data
+data[, sd_ofi := sd(ofi), .(yyyymm, type)]
 data[, bin := 1]
 data[abs(ofi) > sd_ofi, bin := 2]
 data[abs(ofi) > 2 * sd_ofi, bin := 3]
@@ -54,7 +56,6 @@ control_formulas <- c(
 # process one type of data. reg_spec = "nonlinear" or "stdev"
 p.process_one_type <- function(data, reg_spec = "nonlinear") {
   this_type <- data[1, type]
-  this_origin <- data[1, origin]
 
   out_all <- data.table() # save all results here
 
@@ -105,7 +106,7 @@ p.process_one_type <- function(data, reg_spec = "nonlinear") {
   )
   out_all <- merge(out_all, tmp, by = "spec_idx", all.x = T)
   out_all[, type := this_type]
-  out_all[, origin := this_origin]
+  # out_all[, origin := this_origin]
 
   return(out_all)
 }
@@ -129,86 +130,25 @@ p.process_one_type <- function(data, reg_spec = "nonlinear") {
 # }, mc.cores = nc))
 # toc()
 
-# takes 6 mins
+# takes min mins on a 6 core computer
 tic("parallel processing: stdev specification")
 plan(multisession, workers = detectCores() - 2)
-out_stdev <- rbindlist(future_lapply(split(data_all, by = c("type", "origin")), function(x) {
+out_stdev <- rbindlist(future_lapply(split(data_all, by = c("type")), function(x) {
   p.process_one_type(x, reg_spec = "stdev")
 }, future.packages = c("data.table"), future.seed = 123))
 plan(sequential)
 toc()
 
-# # take a look at results
-# tt <- copy(out_stdev[spec_idx == 3 & origin == "flow"])
-# tt <- tt[grepl("ofi", var)]
-# tt2 <- unique(tt[, .(var)])[, var_idx := .I]
-# tt2[, var_lab := paste0(var_idx, "_", var)]
-# tt <- merge(tt, tt2, by = "var")
-# rm(tt2)
-# tt[, tstat := coef / se]
-
-# tt2 <- unique(tt[, .(type)])
-# tt2[, type_lab := paste0(.I, "_", type)]
-# tt <- merge(tt, tt2, by = "type")
-# rm(tt2)
-
-# options(width = 300)
-# dcast(tt, var_lab ~ type_lab, value.var = c("coef"))
-# dcast(tt, var_lab ~ type_lab, value.var = c("tstat"))
-
 to_dir <- "../tmp/price_impact/regression_contemp/alternative_fit/"
 dir.create(to_dir, recursive = T, showWarnings = F)
 saveRDS(out_stdev, paste0(to_dir, "fm_stdev.RDS"))
 
-# # === SANITY check
+# # === SANITY check with earlier
 
-# # --- nonlinear
-# new <- readRDS("tmp/price_impact/regression_contemp/fm_nonlinear.RDS")
-# old <- readRDS("../20250117_quarterly/tmp/price_impact/regression_contemp/full_sample.RDS")
-# old <- old[type != "OFI"]
-# old[type == "OFI_resid", type := "OFI"]
-# setnames(old, "idx", "spec_idx")
+# new <- readRDS("../tmp/price_impact/regression_contemp/alternative_fit/fm_stdev.RDS")
+# old <- readRDS("../tmp/price_impact/regression_contemp/alternative_fit_todel/fm_stdev.RDS")[origin == "flow"][, origin := NULL]
+# dim(new) == dim(old)
 
-# # get joint variables
-# vv <- intersect(names(new), names(old))
-# new <- new[, ..vv]
-# old <- old[, ..vv]
-# rm(vv)
-
-# # compare
-# compare <- merge(new, old, by = c("type", "var", "spec_idx"), all = T)
-# rm(new, old)
-# compare[, mean(abs(coef.x - coef.y)) / mean(abs(coef.x))]
-# compare[, mean(abs(se.x - se.y)) / mean(abs(se.x))]
-# compare[, mean(abs(obs.x - obs.y)) / mean(abs(obs.x))]
-# compare[, mean(abs(r2.x - r2.y)) / mean(abs(r2.x))]
-# compare[, mean(abs(r2_no_ofi.x - r2_no_ofi.y)) / mean(abs(r2_no_ofi.x))]
-
-
-# --- stdev
-# new <- readRDS("tmp/price_impact/regression_contemp/fm_stdev.RDS")
-# old <- readRDS("../20250117_quarterly/tmp/price_impact/multiplier_by_shock_size_quarterly/fm_by_stdev_based_bins.RDS")
-# old <- old[type != "OFI"]
-# old[type == "OFI_resid", type := "OFI"]
-# setnames(old, "idx", "spec_idx")
-
-# # get joint variables
-# vv <- intersect(names(new), names(old))
-# new <- new[, ..vv]
-# old <- old[, ..vv]
-# rm(vv)
-
-# # rename variables to compare
-# new <- new[grepl("ofi_bin", var)]
-# new[, var := gsub("ofi_bin", "M", var)]
-# new[, var := gsub(" ", "", var)]
-# stopifnot(nrow(new) == nrow(old))
-
-# # compare
-# compare <- merge(new, old, by = c("type", "var", "spec_idx"), all = T)
-# rm(new, old)
-# compare[, mean(abs(coef.x - coef.y)) / mean(abs(coef.x))]
-# compare[, mean(abs(se.x - se.y)) / mean(abs(se.x))]
-# compare[, mean(abs(obs.x - obs.y)) / mean(abs(obs.x))]
-# compare[, mean(abs(r2.x - r2.y)) / mean(abs(r2.x))]
-# compare[, mean(abs(r2_no_ofi.x - r2_no_ofi.y)) / mean(abs(r2_no_ofi.x))]
+# out <- merge(new, old, by = c("type", "var", "spec_idx"), all = T)
+# out[, cor(coef.x, coef.y, use = "complete.obs")]
+# out[, cor(se.x, se.y, use = "complete.obs")]

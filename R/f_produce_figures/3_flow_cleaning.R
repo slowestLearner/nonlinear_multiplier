@@ -1,19 +1,16 @@
 # ------ plot figures: the process of flow cleaning
-source("utilities/runmefirst.R")
+library(this.path)
+setwd(this.path::this.dir())
 library(latex2exp)
 library(styler)
-
-# --- create directories
-dir.create("output/figs/data/cleaning/fit/", showWarnings = F, recursive = T)
+source("../utilities/runmefirst.R")
 
 # --- 1) plot flow by bin
-# TODO: move this to the code later
-# data <- readRDS("../20250117_quarterly/tmp/raw_data/cleaning/fit/trade_and_flow_regression_table.RDS")
-data <- readRDS("../20250117_quarterly/tmp/raw_data/cleaning/fit/heterogeneous_trade_to_flow.RDS")
 
-tmp <- data[, .(flow = mean(flow)), bin_flow]
+data <- readRDS("../tmp/additional/clean_fit/flow_to_trade/heterogeneous_trade_to_flow.RDS")
+out <- data[, .(flow = mean(flow)), bin_flow]
 
-pp <- ggplot(tmp, aes(x = bin_flow, y = flow)) +
+pp <- ggplot(out, aes(x = bin_flow, y = flow)) +
   geom_point() +
   geom_line(lwd = 1) +
   theme_classic() +
@@ -23,16 +20,17 @@ pp <- ggplot(tmp, aes(x = bin_flow, y = flow)) +
   geom_vline(xintercept = 0, lty = 3) +
   geom_hline(yintercept = 0, lty = 3) +
   theme(text = element_text(size = 12))
-dir.create("output/figs/data/cleaning/fit/", recursive = T)
-ggsave("output/figs/data/cleaning/fit/flow_by_bin.png", pp, "png", w = 5, h = 4.5)
+
+to_file <- "../output/figs/data/cleaning/fit/flow_by_bin.png"
+dir.create(dirname(to_file), showWarnings = FALSE, recursive = TRUE)
+ggsave(to_file, pp, "png", w = 5, h = 4.5)
 
 # --- 2) plot trade response to flow
-rm(list = ls())
 
-# TODO: move this to the code later
-data <- readRDS("../20250117_quarterly/tmp/raw_data/cleaning/fit/heterogeneous_trade_to_flow.RDS")
-data <- data[bin %in% c(2, 11, 20)]
-data[, lab := NULL]
+# # TODO: move this to the code later
+# data <- readRDS("../20250117_quarterly/tmp/raw_data/cleaning/fit/heterogeneous_trade_to_flow.RDS")
+data <- readRDS("../tmp/additional/clean_fit/flow_to_trade/heterogeneous_trade_to_flow.RDS")
+data <- data[bin %in% c(2, 11, 20)][, lab := NULL] # choose some bins
 
 tmp <- unique(data[, .(bin)])[order(bin)]
 tmp[, lab := c("Existing weight - bottom", "Existing weight - median", "Existing weight - top")]
@@ -53,15 +51,15 @@ pp <- ggplot(data, aes(x = flow, y = coef, fill = reorder(lab, bin))) +
   scale_y_continuous(labels = scales::percent_format(1)) +
   theme(text = element_text(size = 12))
 
-ggsave("output/figs/data/cleaning/fit/trade_to_flow.png", pp, "png", w = 5, h = 4.5)
+to_file <- "../output/figs/data/cleaning/fit/trade_to_flow.png"
+dir.create(dirname(to_file), showWarnings = FALSE, recursive = TRUE)
+ggsave(to_file, pp, "png", w = 5, h = 4.5)
 
 
 # --- 3) plot flow winsorization
-rm(list = ls())
 
-# TODO: move this to the code later
-data <- readRDS("../20250117_quarterly/tmp/raw_data/cleaning/fit/trade_and_flow_regression_table.RDS")
-data <- data[, .(flow = last(flow)), .(yyyymm, wficn)]
+# get fund flows
+data <- readRDS("../tmp/additional/clean_fit/flow_to_trade/regression_table.RDS")[, .(flow = last(flow)), .(yyyymm, wficn)]
 
 cuts_1pct <- quantile(data[, flow], c(.005, .995))
 cuts_5pct <- quantile(data[, flow], c(.025, .975))
@@ -80,18 +78,23 @@ pp <- ggplot(data[abs(flow) < 1], aes(x = flow)) +
   labs(x = "Fund flow", y = "Density") +
   scale_x_continuous(labels = scales::percent_format(1)) +
   theme(text = element_text(size = 12))
-ggsave("output/figs/data/cleaning/fit/flow_winsorization.png", pp, "png", w = 5, h = 4.5)
+
+to_file <- "../output/figs/data/cleaning/fit/flow_winsorization.png"
+dir.create(dirname(to_file), showWarnings = FALSE, recursive = TRUE)
+ggsave(to_file, pp, "png", w = 5, h = 4.5)
 
 
 # --- 4) compare FIT measures
-rm(list = ls())
 
-# TODO: move this to the code later
-data <- readRDS("../../data/demand_shocks/j_fit/quarterly_updated_20250313.RDS")
+# FIT data
+data <- readRDS("../../../../data/demand_shocks/j_fit/quarterly.RDS")
+
+# raw FIT
 out <- data[, .(yyyymm, permno, fit)]
 out[, bin := ntile(fit, 100)]
-
 data[, fit := NULL]
+
+# the other versions of FIT
 names(data)[3:6] <- paste0("fit_adj_v", 1:4)
 data[, fit_adj_v4 := NULL] # too extreme, remove
 data <- data.table(melt(data, id.vars = c("yyyymm", "permno")))
@@ -125,4 +128,7 @@ pp <- ggplot(out, aes(x = fit, y = fit_adj, fill = reorder(lab, idx))) +
   scale_x_continuous(labels = scales::percent_format(1)) +
   scale_y_continuous(labels = scales::percent_format(1)) +
   theme(text = element_text(size = 12))
-ggsave("output/figs/data/cleaning/fit/fit_before_vs_after.png", pp, "png", w = 5, h = 4.5)
+
+to_file <- "../output/figs/data/cleaning/fit/fit_before_vs_after.png"
+dir.create(dirname(to_file), showWarnings = FALSE, recursive = TRUE)
+ggsave(to_file, pp, "png", w = 5, h = 4.5)

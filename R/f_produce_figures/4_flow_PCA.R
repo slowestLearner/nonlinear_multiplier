@@ -5,11 +5,9 @@ source("../utilities/runmefirst.R")
 library(latex2exp)
 library(styler)
 
-# --- create directories
-# to_dir <- "../output/figs/data/cleaning/fit/"
-# dir.create(to_dir, showWarnings = F, recursive = T)
 
 # data
+# data <- readRDS("../tmp/additional/fit_alternative_construction.RDS")[origin == "flow" & !(type %in% c("flow_origin", "flow_resid"))]
 data <- readRDS("../tmp/additional/fit_alternative_construction.RDS")[origin == "flow" & !(type %in% c("flow_origin", "flow_resid"))]
 
 # parse lables
