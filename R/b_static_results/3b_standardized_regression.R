@@ -107,7 +107,6 @@ p.process_one_type <- function(data, reg_spec = "nonlinear") {
             rep("liquidity", length(controls_liq))
         )
     )
-
     out_all <- merge(out_all, tmp, by = "spec_idx", all.x = T)
     out_all[, type := this_type]
 
