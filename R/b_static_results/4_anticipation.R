@@ -160,10 +160,10 @@ p.process_one_type <- function(data, reg_spec = "nonlinear") {
 
     # name the control variables being added
     tmp <- data.table(
-        spec_idx = 1:(length(controls_list) + 4),
-        var_added = c("none_init", "controls_char", "controls_char+controls_liq", "none", controls_list),
+        spec_idx = 1:(length(controls_list) + 3),
+        var_added = c("none_init", "controls_char", "controls_char+controls_liq", controls_list),
         var_type = c(
-            rep("", 4), rep("return-predicting chars", length(controls_char)),
+            rep("", 3), rep("return-predicting chars", length(controls_char)),
             rep("liquidity", length(controls_liq))
         )
     )
