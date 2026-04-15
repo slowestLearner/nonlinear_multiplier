@@ -61,8 +61,27 @@ to_file <- "../../../../data/demand_shocks/j_fit/quarterly.RDS"
 dir.create(dirname(to_file), recursive = T, showWarnings = F)
 saveRDS(tmp, to_file)
 
-# --- liquidity-related variables, downloaded from TAQ and processed
-data <- readRDS("~/Desktop/J-Leaves/data/stockprices/processed/taq/liquidity/monthly_file.RDS")
+# --- liquidity-related variables, downloaded from WRDS intraday indicators (based on TAQ data)
+
+data <- readRDS("~/Desktop/J-Leaves/data/stockprices/processed/taq/liquidity/monthly_file.RDS")[, .(date, permno, effective_spread, quoted_spread)]
+to_file <- "../../../../data/stocks/liquidity/monthly_file.RDS"
+dir.create(dirname(to_file), recursive = T, showWarnings = F)
+saveRDS(data, to_file)
+
+data <- readRDS("~/Desktop/J-Leaves/data/stockprices/processed/taq/liquidity/daily_file.RDS")[, .(date, permno, effective_spread, quoted_spread)]
+to_file <- "../../../../data/stocks/liquidity/daily_file.RDS"
+dir.create(dirname(to_file), recursive = T, showWarnings = F)
+saveRDS(data, to_file)
 
 
-tmp <- readRDS("~/Desktop/J-Leaves/data/stockprices/processed/taq/liquidity/daily_file.RDS")
+# --- Andrew chen characteristics, turned into uniform distributions by rank and filled forward a bit
+data <- readRDS("~/Desktop/J-Leaves/data/stockprices/raw/characteristics/andrew_chen_characteristics/most_common_ones_not_lagged/202312/3_unif_filled_fwd_up_to_halflife.RDS")[yyyymm >= 197001]
+to_file <- "../../../../data/stocks/controls/monthly_characteristics_not_lagged.RDS"
+dir.create(dirname(to_file), recursive = T, showWarnings = F)
+saveRDS(data, to_file)
+
+# --- FF12 industry classifications, indicators, with means taken out (does not matter for results)
+data <- readRDS("~/Desktop/J-Leaves/data/stockprices/raw/characteristics/industries/ff12_zero_mean.RDS")[yyyymm >= 197001][, other := NULL] # take out other, otherwise colinear
+to_file <- "../../../../data/stocks/controls/ff12_industries_zero_mean.RDS"
+dir.create(dirname(to_file), recursive = T, showWarnings = F)
+saveRDS(data, to_file)

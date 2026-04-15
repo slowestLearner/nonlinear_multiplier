@@ -1,4 +1,4 @@
-# --- put together quarterly data for regressions (1993 to 2022)
+# --- put together quarterly data for regressions
 library(this.path)
 setwd(this.path::this.dir())
 source("../utilities/runmefirst.R")
@@ -32,7 +32,6 @@ rm(stock_data, data)
 
 # -- 2) add BMI to the quarterly OFI/FIT tables. keep track of associated controls as well
 
-# data <- data.table(haven::read_stata("../../../tests/9_russell_rdd/russell_rdd_stock_level_panel.dta"))
 data <- readRDS("../../../../data/demand_shocks/bmi/russell_rdd_stock_level_panel.RDS")
 
 # Calculate the log of tot_mktcap_r3
@@ -77,7 +76,7 @@ data <- data[idx == 1][, idx := NULL]
 
 # combine with FIT and OFI data
 reg_data <- rbind(data[, .(yyyymm, permno, type = "BMI", ret, ofi)], data_fit_and_ofi)
-reg_data <- reg_data[yyyymm >= 199306 & yyyymm <= 202212] # the main sample period for the paper
+reg_data <- reg_data[yyyymm <= 202212]
 to_file <- "../tmp/raw_data/reg_inputs/all_ofi_and_ret.RDS"
 dir.create(dirname(to_file), showWarnings = FALSE, recursive = TRUE)
 saveRDS(reg_data, to_file)

@@ -33,6 +33,7 @@ control_formulas <- c(
 )
 
 # process one type of data. reg_spec = "nonlinear" or "stdev"
+# TODO: delete the nonlinear specification in the final version
 p.process_one_type <- function(data, reg_spec = "nonlinear") {
   this_type <- data[1, type]
 
@@ -77,10 +78,10 @@ p.process_one_type <- function(data, reg_spec = "nonlinear") {
 
   # name the control variables being added
   tmp <- data.table(
-    spec_idx = 1:(length(controls_list) + 3),
-    var_added = c("none_init", "controls_char", "controls_char+controls_liq", controls_list),
+    spec_idx = 1:(length(controls_list) + 4),
+    var_added = c("none_init", "controls_char", "controls_char+controls_liq", "none", controls_list),
     var_type = c(
-      rep("", 3), rep("return-predicting chars", length(controls_char)),
+      rep("", 4), rep("return-predicting chars", length(controls_char)),
       rep("liquidity", length(controls_liq))
     )
   )
@@ -91,7 +92,7 @@ p.process_one_type <- function(data, reg_spec = "nonlinear") {
 }
 toc()
 
-# # nonlinear specification---
+# # nonlinear specification--- TODO: delete in final version
 # tic("static panel: nonlinear")
 # out_nonlinear <- rbindlist(mclapply(split(data_all, by = "type"), function(x) {
 #   p.process_one_type(x, reg_spec = "nonlinear")
@@ -113,68 +114,17 @@ to_dir <- "../tmp/price_impact/regression_contemp/"
 dir.create(to_dir, recursive = T, showWarnings = F)
 saveRDS(out_stdev, paste0(to_dir, "panel_stdev.RDS"))
 
-# # === SANITY check
+# # === SANITY check: some differences for BMI?
 
-# # --- nonlinear (small differences)
-# new <- readRDS("tmp/price_impact/regression_contemp/panel_nonlinear.RDS")
-# old <- readRDS("../20250117_quarterly/tmp/price_impact/regression_contemp/full_sample_panel.RDS")
-# old <- old[type != "OFI"]
-# old[type == "OFI_resid", type := "OFI"]
-#
-# # get overlapping part
-# new <- new[spec_idx %in% 1:3]
-# vv <- intersect(names(new), names(old))
-# new <- new[, ..vv]
-# old <- old[, ..vv]
-# rm(vv)
-# stopifnot(dim(new) == dim(old))
-#
-# # convert coef units
-# old[var == "ofi_absofi", coef := coef * 100]
-# old[var == "ofi_absofi", se := se * 100]
-#
-# # compare
-# compare <- merge(new, old, by = c("type", "var", "spec_idx"), all = T)
-# stopifnot(nrow(compare) == nrow(new))
-# rm(new, old)
-#
-# compare[, mean(abs(coef.x - coef.y)) / mean(abs(coef.x))]
-# compare[, mean(abs(se.x - se.y)) / mean(abs(se.x))]
-# compare[, mean(abs(obs.x - obs.y)) / mean(abs(obs.x))]
-# compare[, mean(abs(r2.x - r2.y)) / mean(abs(r2.x))]
-# compare[, mean(abs(r2_no_ofi.x - r2_no_ofi.y)) / mean(abs(r2_no_ofi.x))]
+# new <- readRDS("../tmp/price_impact/regression_contemp/panel_stdev.RDS")
+# old <- readRDS("../tmp/price_impact/regression_contemp_todel/panel_stdev.RDS")
+# dim(new) == dim(old)
 
+# setkey(new, spec_idx, var, type)
+# setkey(old, spec_idx, var, type)
 
-# # --- stdev (no problem)
-# new <- readRDS("tmp/price_impact/regression_contemp/panel_stdev.RDS")
-# old <- readRDS("../20250117_quarterly/tmp/price_impact/regression_contemp/full_sample_panel_with_stdev_bins.RDS")
-# old <- old[type != "OFI"]
-# old[type == "OFI_resid", type := "OFI"]
-#
-# # get overlapping part
-# new <- new[spec_idx %in% 1:3]
-#
-# # get joint variables
-# new[, var := gsub("ofi_bin", "M", var)]
-# new[, var := gsub(" ", "", var)]
-# common_vars <- intersect(unique(new[, var]), unique(old[, var]))
-# new <- new[var %in% common_vars]
-# old <- old[var %in% common_vars]
-# rm(common_vars)
-#
-# vv <- intersect(names(new), names(old))
-# new <- new[, ..vv]
-# old <- old[, ..vv]
-# rm(vv)
-# stopifnot(dim(new) == dim(old))
-#
-# # compare
-# compare <- merge(new, old, by = c("type", "var", "spec_idx"), all = T)
-# stopifnot(nrow(compare) == nrow(new))
-# rm(new, old)
-#
-# compare[, mean(abs(coef.x - coef.y)) / mean(abs(coef.x))]
-# compare[, mean(abs(se.x - se.y)) / mean(abs(se.x))]
-# compare[, mean(abs(obs.x - obs.y)) / mean(abs(obs.x))]
-# compare[, mean(abs(r2.x - r2.y)) / mean(abs(r2.x))]
-# compare[, mean(abs(r2_no_ofi.x - r2_no_ofi.y)) / mean(abs(r2_no_ofi.x))]
+# out <- merge(new[, .(spec_idx, var, type, coef, se)], old[, .(spec_idx, var, type, coef, se)], by = c("spec_idx", "var", "type"))
+# out[, cor(coef.x, coef.y, use = "complete.obs"), type] # WAIT BMI changed so much?
+# out[, cor(se.x, se.y, use = "complete.obs"), type]
+# new[, max(obs), type]
+# old[, max(obs), type]

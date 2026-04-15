@@ -1,4 +1,4 @@
-# Compare rolling standard deviations of FIT and OFI
+# --- estimate regressions using standardized demand
 library(this.path)
 setwd(this.path::this.dir())
 source("../utilities/runmefirst.R")
@@ -15,11 +15,10 @@ controls_list <- c(controls_char, controls_liq)
 rm(cdata)
 
 # merge with lagged stdev
-demand_vol <- readRDS("../tmp/raw_data/reg_inputs/quarterly_fit_and_ofi_lagged_rolling_stdev.RDS")
-demand_vol <- demand_vol[0 == rowSums(is.na(demand_vol))]
-demand_vol[, std_ofi := Winsorize(std_ofi, val = quantile(std_ofi, probs = c(.01, .99))), .(type, spec)]
+demand_vol <- readRDS("../tmp/raw_data/reg_inputs/quarterly_fit_and_ofi_lagged_rolling_stdev.RDS") %>% na.omit()
+demand_vol[, std_ofi := Winsorize(std_ofi, val = quantile(std_ofi, probs = c(.001, .999))), .(type, spec)]
 
-# translate lags
+# parse lags
 demand_vol[, spec := gsub("sd_ofi_", "", spec)]
 demand_vol[, spec := as.integer(gsub("q", "", spec))]
 setnames(demand_vol, "spec", "stdev_lag")
@@ -37,7 +36,7 @@ data[, c("scaling", "ofi_raw", "std_ofi") := NULL]
 # mark specifications
 data[, type := paste0(type, "-", stdev_lag)]
 
-# we need to redo the transformation to get nonlinear x variables AFTER dividing by vol
+# resort the vol-adjusted demand into bins
 data[, ofi_absofi := ofi * abs(ofi)]
 data[, sd_ofi := sd(ofi), .(yyyymm, type)]
 data[, bin := 1]
@@ -54,7 +53,7 @@ rm(data)
 gc()
 
 # ###########################################################
-# Fama-MacBeth with nonlinear or stdev-based specification
+# Fama-MacBeth
 # ###########################################################
 
 # control variables for different specifications
@@ -65,6 +64,7 @@ control_formulas <- c(
 )
 
 # process one type of data. reg_spec = "nonlinear" or "stdev"
+# TODO: get rid of nonlinear
 p.process_one_type <- function(data, reg_spec = "nonlinear") {
     this_type <- data[1, type]
 
@@ -107,6 +107,7 @@ p.process_one_type <- function(data, reg_spec = "nonlinear") {
             rep("liquidity", length(controls_liq))
         )
     )
+
     out_all <- merge(out_all, tmp, by = "spec_idx", all.x = T)
     out_all[, type := this_type]
 
@@ -114,7 +115,7 @@ p.process_one_type <- function(data, reg_spec = "nonlinear") {
 }
 
 
-# in parallel, takes around X mins
+# on a 6 core machine, takes around 2 mins
 tic()
 out_stdev <- rbindlist(mclapply(split(data_all, by = "type"), function(x) {
     p.process_one_type(x, reg_spec = "stdev")
@@ -127,42 +128,13 @@ dir.create(to_dir, recursive = T, showWarnings = F)
 saveRDS(out_stdev, paste0(to_dir, "standardized_fm_stdev.RDS"))
 
 
-# # --- SANITY check
+# # --- SANITY check: similar enough
 
+# new <- readRDS("../tmp/price_impact/regression_contemp/standardized_fm_stdev.RDS")
+# old <- readRDS("../tmp/price_impact/regression_contemp_todel/standardized_fm_stdev.RDS")
+# dim(new) == dim(old)
 
-# # --- stdev
-# new <- readRDS("tmp/price_impact/regression_contemp/standardized_fm_stdev.RDS")
-# new[, stdev_lag := as.integer(gsub(".*-", "", type))]
-# new[, type := substr(type, 1, 3)]
-# old <- readRDS("../20250117_quarterly/tmp/price_impact/regression_contemp/full_sample_standardized_d_by_stdev_bin.RDS")
-# old <- old[type != "OFI"]
-# old[type == "OFI_resid", type := "OFI"]
-
-# # get joint variables
-# new <- new[spec_idx == 3][, spec_idx := NULL]
-# old[, var := gsub("M", "ofi_bin", var)]
-# new[, var := gsub(" ", "", var)]
-# vv <- intersect(names(new), names(old))
-# new <- new[, ..vv]
-# old <- old[, ..vv]
-# rm(vv)
-
-# common_vars <- intersect(unique(new[, var]), unique(old[, var]))
-# new <- new[var %in% common_vars]
-# old <- old[var %in% common_vars]
-# rm(common_vars)
-# stopifnot(dim(new) == dim(old))
-
-# # compare - not identical, but similar?
-# compare <- merge(new, old, by = c("type", "var", "stdev_lag"), all = T)
-# rm(new, old)
-
-# compare[, mean(abs(coef.x - coef.y)) / mean(abs(coef.x))]
-# compare[, mean(abs(se.x - se.y)) / mean(abs(se.x))]
-# compare[, mean(abs(obs.x - obs.y)) / mean(abs(obs.x))]
-# compare[, mean(abs(r2.x - r2.y)) / mean(abs(r2.x))]
-
-# compare[, cor(coef.x, coef.y)]
-# compare[, cor(se.x, se.y)]
-# compare[, cor(obs.x, obs.y)]
-# compare[, cor(r2.x, r2.y)]
+# out <- merge(new, old, by = c("spec_idx", "var", "type"))
+# out[, cor(coef.x, coef.y, use = "complete.obs"), type]
+# out[, cor(se.x, se.y, use = "complete.obs"), type]
+# out[, max(obs.x) / max(obs.y), type]

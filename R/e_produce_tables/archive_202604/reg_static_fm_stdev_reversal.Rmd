@@ -1,0 +1,174 @@
+---
+author: ""
+header-includes:
+   - \usepackage{rotating}
+   - \usepackage{float}
+   - \usepackage{natbib}
+   - \usepackage{booktabs}
+   - \usepackage{multirow}
+geometry: "left=1cm,right=1cm,top=0.9cm,bottom=1.2cm"
+output: 
+  pdf_document:
+    citation_package: natbib
+    keep_tex: false
+    number_sections: true
+link-citations: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r, echo = FALSE, results = 'asis', warning=FALSE, message=FALSE}
+rm(list = ls())
+library(data.table)
+library(dplyr)
+library(tidyr)
+library(scales)
+library(xtable)
+library(stringr) # For str_remove and strcat (if pracma is not used)
+library(reshape2) # For cast()
+library(this.path)
+setwd(this.path::this.dir())
+
+# === panel A, regression results
+data <- readRDS("../tmp/price_impact/regression_contemp/reversals/fm_stdev.RDS")[type != "OFI_pre_whitened"]
+
+# choose specification and variables
+data[, type_idx := ifelse(type == "BMI", 1, ifelse(type == "FIT", 2, 3))]
+data <- data[grepl("ofi", var)]
+data <- data[spec_idx == 3][, spec_idx := NULL]
+
+# variable names
+# variable names
+data[var == "ofi", var_lab := "$d_{n,t}$"]
+data[var == "ofi_bin2", var_lab := "$d_{n,t} \\cdot I_{\\{|d_{n,t}| \\in [\\sigma, 2\\sigma]\\}}$"]
+data[var == "ofi_bin3", var_lab := "$d_{n,t} \\cdot I_{\\{|d_{n,t}| > 2\\sigma\\}}$"]
+
+# choose regression specifications
+data <- data[ret_hor %in% c(1, 2, 4)]
+tmp <- unique(data[, .(type_idx, ret_hor)])[order(type_idx, ret_hor)]
+tmp[, reg_idx := 1:nrow(tmp)]
+data <- merge(data, tmp, by = c("type_idx", "ret_hor"))
+rm(tmp)
+
+# = regression results
+tmp <- copy(data)
+tt <- unique(tmp[, list(var)])
+tt[, idx := 1:nrow(tt)]
+tmp <- merge(tmp, tt, by = "var")
+rm(tt)
+
+# add stars to coefficients
+cuts <- abs(qnorm(c(.01, .05, .1) / 2))
+tmp[, abs_tstat := abs(coef / se)]
+tmp[, ss := ifelse(abs_tstat > cuts[1], 3, ifelse(abs_tstat > cuts[2], 2, ifelse(abs_tstat > cuts[3], 1, 0)))]
+tmp[, coef_lab := paste0("$", sprintf("%.2f", coef))]
+tmp[, ss_lab := sapply(tmp[, ss], function(x) {
+  ifelse(x > 0,
+    paste0("^{", strrep("*", x), "}$"),
+    "$"
+  )
+})]
+tmp[, coef_lab := paste0(coef_lab, ss_lab)]
+tmp[, ss_lab := NULL]
+
+est <- dcast(tmp[, list(idx, reg_idx, coef_lab)], idx ~ reg_idx, value.var = "coef_lab") %>%
+  dplyr::mutate(group_id = 100 * row_number(), type = "coef")
+
+se <- dcast(tmp[, list(idx, reg_idx, se)], idx ~ reg_idx, value.var = "se") %>%
+  dplyr::mutate(group_id = 100 * row_number() + 1, type = "se") %>%
+  dplyr::mutate_at(vars(2:(ncol(est) - 2)), ~ paste0("$(", sprintf("%.2f", round(., 2)), ")$"))
+
+var_labels <- unique(tmp[, list(idx, var_lab)])
+
+reg_tbl <- bind_rows(est, se) %>%
+  dplyr::inner_join(var_labels, by = "idx") %>%
+  dplyr::mutate(idx = var_lab) %>%
+  dplyr::mutate(var_lab = NULL) %>%
+  dplyr::rename(var_lab = idx)
+rm(est, se)
+
+# note controls
+ctrls <- data.table(var_lab = "Predictor controls", t(rep(c("Y", "Y", "Y"), 3)))
+ctrls <- rbind(ctrls, data.table(var_lab = "Liquidity controls", t(rep(c("Y", "Y", "Y"), 3))))
+ctrls[, group_id := 300 + nrow(ctrls)]
+ctrls[, type := ""]
+names(ctrls) <- names(reg_tbl)
+reg_tbl <- bind_rows(reg_tbl, ctrls)
+rm(ctrls)
+
+obs_and_r2 <- unique(data[, list(reg_idx, obs, r2, marginalr2 = r2 - r2_no_ofi)]) %>%
+  mutate(
+    obs = comma(obs),
+    r2 = paste0("$", sprintf("%.3f", r2), "$"),
+    marginalr2 = paste0("$", sprintf("%.3f", marginalr2), "$")
+  ) %>%
+  pivot_longer(., -reg_idx) %>%
+  pivot_wider(names_from = "reg_idx", values_from = "value") %>%
+  dplyr::mutate(name = replace(name, name == "r2", "$R^2$")) %>%
+  dplyr::mutate(name = replace(name, name == "marginalr2", "Marginal $R^2(d_{n,t})$")) %>%
+  mutate(name = replace(name, name == "obs", "Obs")) %>%
+  rename(var_lab = name) %>%
+  mutate(group_id = c(1001, 1002, 1003), type = "")
+
+
+reg_tbl <- bind_rows(reg_tbl, obs_and_r2) %>%
+  dplyr::arrange(group_id) %>%
+  mutate(var_lab = ifelse(type == "se", "", var_lab)) %>%
+  mutate(type = NULL, group_id = NULL)
+
+# add col columns
+col_names <- data.table(t(as.data.frame(c("", paste0("(", 1:(ncol(reg_tbl) - 1), ")")))))
+names(col_names) <- names(reg_tbl)
+reg_tbl <- bind_rows(col_names, reg_tbl)
+rm(col_names)
+tbl <- copy(reg_tbl)
+
+align_vactor <- paste0("ll", paste0(rep("c", times = ncol(tbl) - 1), collapse = ""))
+x.side <- xtable(tbl, align = align_vactor)
+
+
+this_add_to_row <- list(
+  pos = list(
+    -1, 6, 8,
+    # 12,
+    nrow(tbl)
+  ),
+  command = c(
+    "\\hline \\multicolumn{10}{c}{Dependent variable: future stock return $r_{n,t+1 \\to t+h}$} \\\\\n
+                                    \\hline & \\multicolumn{3}{c}{BMI} & \\multicolumn{3}{c}{FIT} & \\multicolumn{3}{c}{OFI} \\\\\n \\cmidrule(l){2-4} \\cmidrule(l){5-7} \\cmidrule(l){8-10} \n
+                                    $h = $ & 1 & 2 & 4 & 1 & 2 & 4 & 1 & 2 & 4 \\\\\n \\cmidrule(l){2-4} \\cmidrule(l){5-7} \\cmidrule(l){8-10} \\vspace{5pt}  \n",
+    rep("\\vspace{5pt}", 2),
+    "\\hline \n"
+  )
+)
+
+
+print(x.side,
+  type = "latex",
+  table.placement = "!ht",
+  include.rownames = FALSE,
+  include.colnames = FALSE,
+  tabular.environment = "tabular",
+  caption.placement = NULL, # "top", NULL
+  hline.after = NULL, # We don't need hline; we use booktabs
+  floating = FALSE, # whether \begin{Table} should be created (TRUE) or not (FALSE)
+  sanitize.text.function = force, # Important to treat content of first column as latex function
+  add.to.row = this_add_to_row
+)
+
+to_dir <- "../output/tables/"
+dir.create(to_dir, showWarnings = F, recursive = T)
+print(x.side,
+  type = "latex",
+  table.placement = "!ht",
+  include.rownames = FALSE,
+  include.colnames = FALSE,
+  tabular.environment = "tabular",
+  caption.placement = NULL, # "top", NULL
+  hline.after = NULL, # We don't need hline; we use booktabs
+  floating = FALSE, # whether \begin{Table} should be created (TRUE) or not (FALSE)
+  sanitize.text.function = force, # Important to treat content of first column as latex function
+  add.to.row = this_add_to_row,
+  file = paste0(to_dir, "reg_static_fm_stdev_reversal.tex")
+)
+```

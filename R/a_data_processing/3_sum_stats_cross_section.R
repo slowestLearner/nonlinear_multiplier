@@ -3,7 +3,8 @@ library(this.path)
 setwd(this.path::this.dir())
 source("../utilities/runmefirst.R")
 
-data <- readRDS("../tmp/raw_data/reg_inputs/all_ofi_and_ret.RDS")
+data <- readRDS("../tmp/raw_data/reg_inputs/all_ofi_and_ret.RDS")[yyyymm %in% 199306:202212]
+
 
 # turn into percentages
 data[, ofi := 100 * ofi]

@@ -1,0 +1,292 @@
+---
+author: ""
+header-includes:
+   - \usepackage{rotating}
+   - \usepackage{float}
+   - \usepackage{natbib}
+   - \usepackage{booktabs}
+   - \usepackage{multirow}
+geometry: "left=1cm,right=1cm,top=0.9cm,bottom=1.2cm"
+output: 
+  pdf_document:
+    citation_package: natbib
+    keep_tex: false
+    number_sections: true
+link-citations: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r, echo = FALSE, results = 'asis', warning=FALSE, message=FALSE}
+rm(list = ls())
+options(xtable.comment = FALSE)
+library(data.table)
+library(dplyr)
+library(naniar)
+library(scales)
+library(tidyr)
+library(xtable)
+library(pracma)
+library(this.path)
+setwd(this.path::this.dir())
+
+# ==============================================================================
+# DATA LOADING AND PREPROCESSING
+# ==============================================================================
+
+# Load data
+data <- readRDS("../tmp/price_impact/regression_dynamic/fm_stdev.RDS")[!grepl("OFI_pre_whitened", type)]
+
+# choose a few specifications
+data <- data[spec_idx == 22]
+data[, se := se_nw]
+data[, c("var_added", "var_type", "se_nw", "nw_lag", "spec_idx") := NULL]
+
+# rank regression specifications
+tmp <- unique(data[, .(type)])[order(type)]
+tmp[, reg_idx := .I]
+data <- merge(data, tmp, by = c("type"))
+rm(tmp)
+
+# choose variable and alter names for outputting
+data <- data[grepl("ofi_bin", var)]
+data[, var := gsub("ofi_bin", "M", var)]
+data[, var := gsub(" ", "", var)]
+
+# Process variable labels for LaTeX formatting
+data[, var_lab := var]
+data[, var_lab := gsub("M1", "M_\\{\\\\\\left|\\\\sum_{l=1}^L d_{n,t-l}\\\\right| < \\\\sigma\\}", var_lab)]
+data[, var_lab := gsub("M2", "M_\\{\\\\\\left|\\\\sum_{l=1}^L d_{n,t-l}\\\\right| \\\\in \\[\\\\sigma, 2\\\\sigma\\]\\}", var_lab)]
+data[, var_lab := gsub("M3", "M_\\{\\\\\\left|\\\\sum_{l=1}^L d_{n,t-l}\\\\right| > 2 \\\\sigma\\}", var_lab)]
+data[, var_lab := paste0("$", var_lab, "$")]
+
+# ==============================================================================
+# PANEL A: REGRESSION RESULTS
+# ==============================================================================
+
+# Filter for main variables (M1, M2, M3)
+main_vars <- data[var %in% paste0("M", 1:3)]
+
+# Create index for variable ordering
+var_index <- unique(main_vars[, list(var)])
+var_index[, idx := .I]
+main_vars <- merge(main_vars, var_index, by = "var")
+rm(var_index)
+
+# Calculate significance stars
+signif_cuts <- abs(qnorm(c(0.01, 0.05, 0.1) / 2))
+main_vars[, abs_tstat := abs(coef / se)]
+main_vars[, ss := fcase(
+  abs_tstat > signif_cuts[1], 3,
+  abs_tstat > signif_cuts[2], 2,
+  abs_tstat > signif_cuts[3], 1,
+  default = 0
+)]
+
+# Format coefficients with stars
+main_vars[, coef_lab := paste0("$", sprintf("%.2f", coef))]
+main_vars[, ss_lab := sapply(ss, function(x) {
+  ifelse(x > 0, paste0("^{", strcat(rep("*", x)), "}$"), "$")
+})]
+main_vars[, coef_lab := paste0(coef_lab, ss_lab)]
+main_vars[, ss_lab := NULL]
+
+# Create coefficient table
+est_table <- dcast(main_vars[, list(idx, reg_idx, coef_lab)],
+  idx ~ reg_idx,
+  value.var = "coef_lab"
+) %>%
+  mutate(group_id = 100 * row_number(), type = "coef")
+
+# Create standard errors table
+se_table <- dcast(main_vars[, list(idx, reg_idx, se)],
+  idx ~ reg_idx,
+  value.var = "se"
+) %>%
+  mutate(group_id = 100 * row_number() + 1, type = "se") %>%
+  mutate(across(2:9, ~ paste0("$(", sprintf("%.2f", round(., 2)), ")$")))
+
+# Get variable labels for joining
+var_labels <- unique(main_vars[, list(idx, var_lab)])
+
+# Combine coefficient and SE tables
+reg_tbl <- bind_rows(est_table, se_table) %>%
+  inner_join(var_labels, by = "idx") %>%
+  mutate(idx = var_lab) %>%
+  select(-var_lab) %>%
+  rename(var_lab = idx)
+rm(est_table, se_table)
+
+# # add column names
+# # --- added: begin
+# col_names <- data.table(t(c("", rep(c("L = 1", "2", "3", "4"), 2), NA, "")))
+# setnames(col_names, names(reg_tbl))
+# col_names[, group_id := as.numeric(0)]
+# reg_tbl <- rbind(col_names, reg_tbl)
+# rm(col_names)
+# # --- added: end
+
+# Add control indicators
+row1 <- c("Predictor controls", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y")
+row2 <- c("Liquidity controls", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y")
+row3 <- c("Interacted: predictors", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y")
+row4 <- c("Interacted: liquidity", "Y", "Y", "Y", "Y", "Y", "Y", "Y", "Y")
+
+# Combine into a matrix first, then convert to data.table
+mat <- rbind(row1, row2, row3, row4)
+controls <- as.data.table(mat)
+controls[, group_id := 400 + 1:4]
+controls[, type := ""]
+setnames(controls, names(reg_tbl))
+reg_tbl <- bind_rows(reg_tbl, controls)
+
+# Add observations and R-squared
+obs_and_r2 <- unique(data[, list(reg_idx, obs, r2)]) %>%
+  mutate(
+    obs = comma(obs),
+    r2 = paste0("$", sprintf("%.3f", r2), "$")
+  ) %>%
+  pivot_longer(cols = -reg_idx, names_to = "name", values_to = "value") %>%
+  pivot_wider(names_from = "reg_idx", values_from = "value") %>%
+  mutate(name = case_when(
+    name == "r2" ~ "$R^2$",
+    name == "obs" ~ "Obs",
+    TRUE ~ name
+  )) %>%
+  rename(var_lab = name) %>%
+  mutate(group_id = c(1001, 1002), type = "")
+
+# Combine all components for Panel A
+reg_tbl <- bind_rows(reg_tbl, obs_and_r2) %>%
+  arrange(group_id) %>%
+  mutate(var_lab = ifelse(type == "se", "", var_lab)) %>%
+  select(-type, -group_id)
+
+# ==============================================================================
+# PANEL B: COEFFICIENT COMPARISONS
+# ==============================================================================
+
+# Filter for non-main variables
+other_vars <- copy(data[!(var %in% paste0("M", 1:3))])
+
+# Create index for variable ordering
+other_var_index <- unique(other_vars[, list(var_lab)])[order(var_lab)]
+other_var_index[, idx := c(3, 2, 1)]
+other_vars <- merge(other_vars, other_var_index, by = "var_lab")
+
+# Calculate significance and format coefficients
+other_vars[, abs_tstat := abs(coef / se)]
+other_vars[, ss := fcase(
+  abs_tstat > signif_cuts[1], 3,
+  abs_tstat > signif_cuts[2], 2,
+  abs_tstat > signif_cuts[3], 1,
+  default = 0
+)]
+
+other_vars[, coef_lab := paste0("$", sprintf("%.2f", coef))]
+other_vars[, ss_lab := sapply(ss, function(x) {
+  ifelse(x > 0, paste0("^{", strcat(rep("*", x)), "}$"), "$")
+})]
+other_vars[, coef_lab := paste0(coef_lab, ss_lab)]
+other_vars[, ss_lab := NULL]
+
+# Get variable labels
+other_var_labels <- unique(other_vars[, list(idx, var_lab)])
+
+# Create coefficient and SE tables for Panel B
+est_other <- dcast(other_vars[, list(idx, reg_idx, coef_lab)],
+  idx ~ reg_idx,
+  value.var = "coef_lab"
+) %>%
+  mutate(group_id = 100 * row_number(), type = "coef")
+
+se_other <- dcast(other_vars[, list(idx, reg_idx, se)],
+  idx ~ reg_idx,
+  value.var = "se"
+) %>%
+  mutate(group_id = 100 * row_number() + 1, type = "se") %>%
+  mutate(across(2:9, ~ paste0("$(", sprintf("%.2f", round(., 2)), ")$")))
+
+# Combine Panel B tables
+comp_tbl <- bind_rows(est_other, se_other) %>%
+  inner_join(other_var_labels, by = "idx") %>%
+  mutate(idx = var_lab) %>%
+  select(-var_lab) %>%
+  rename(var_lab = idx) %>%
+  arrange(group_id) %>%
+  mutate(var_lab = ifelse(type == "se", "", var_lab)) %>%
+  select(-group_id, -type)
+
+# Combine Panels A and B
+reg_tbl <- bind_rows(reg_tbl, comp_tbl)
+setnames(reg_tbl, as.character(1:ncol(reg_tbl)))
+rm(est_other, se_other, other_var_index, other_vars, obs_and_r2, comp_tbl)
+
+# ==============================================================================
+# TABLE FORMATTING AND OUTPUT
+# ==============================================================================
+
+# Add column names
+col_names <- data.table(t(c("", paste0("(", 1:8, ")"))))
+setnames(col_names, names(reg_tbl))
+reg_tbl <- bind_rows(col_names, reg_tbl)
+rm(col_names)
+
+# Add lookback window information
+lookback_windows <- data.table(t(c("", rep(c("$L=1$", as.character(2:4)), 2))))
+setnames(lookback_windows, names(reg_tbl))
+reg_tbl <- bind_rows(lookback_windows, reg_tbl)
+rm(lookback_windows)
+
+# Create final table object
+tbl <- copy(reg_tbl)
+
+# Prepare LaTeX table formatting
+align_vector <- paste0("ll", strrep("c", ncol(tbl) - 1))
+x_table <- xtable(tbl, align = align_vector)
+
+# Define LaTeX formatting commands
+this_add_to_row <- list(
+  pos = list(-1, 1, 1, 7, 11, 14, nrow(tbl)),
+  command = c(
+    "\\hline \\multicolumn{9}{c}{Panel A: price impact regressions} \\\\\n \\hline
+    & \\multicolumn{8}{c}{Dependent variable: stock return $r_{n,t}$} \\\\\n
+    \\cmidrule(l){2-9} $d_{n,t} = $ & \\multicolumn{4}{c}{FIT} & \\multicolumn{4}{c}{OFI} \\\\\n \\cmidrule(l){2-5} \\cmidrule(l){6-9} \n",
+    "\\cmidrule(l){2-5} \\cmidrule(l){6-9} \n",
+    rep("\\vspace{5pt}\n", 3),
+    "\\hline \\multicolumn{9}{c}{Panel B: Coefficient differences} \\\\\n \\hline \n",
+    "\\hline \n"
+  )
+)
+
+# Print to console
+print(x_table,
+  type = "latex",
+  table.placement = "!ht",
+  include.rownames = FALSE,
+  include.colnames = FALSE,
+  tabular.environment = "tabular",
+  caption.placement = NULL,
+  hline.after = NULL,
+  floating = FALSE,
+  sanitize.text.function = force,
+  add.to.row = this_add_to_row
+)
+
+# Save to file
+to_dir <- "../output/tables/"
+dir.create(to_dir, showWarnings = F, recursive = T)
+print(x_table,
+  type = "latex",
+  table.placement = "!ht",
+  include.rownames = FALSE,
+  include.colnames = FALSE,
+  tabular.environment = "tabular",
+  caption.placement = NULL,
+  hline.after = NULL,
+  floating = FALSE,
+  sanitize.text.function = force,
+  add.to.row = this_add_to_row,
+  file = paste0(to_dir, "reg_dynamic_fm_stdev_vary_lookback.tex")
+)
+```
