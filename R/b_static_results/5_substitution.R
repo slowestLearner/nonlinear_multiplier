@@ -1,4 +1,3 @@
-# Augmenting 2a_regression_fm.R to also control for chars X bins
 # TODO: merge this into 2a_regression_fm.R at some point
 library(this.path)
 setwd(this.path::this.dir())
@@ -20,14 +19,13 @@ rm(cdata)
 tmp <- readRDS("../tmp/raw_data/controls/controls_for_BMI.RDS")
 controls_bmi <- setdiff(names(tmp), c("yyyymm", "permno"))
 rm(tmp)
-
+toc()
 
 # ###########################################################
-# Fama-MacBeth with nonlinear or stdev-based specification
+# Fama-MacBeth
 # ###########################################################
 
 # control variables for different specifications.
-# Keep the first few specifications the same as in 2a_regression_fm.R for comparison
 controls_char_bin <- paste0(controls_char, " * as.factor(bin)")
 controls_liq_bin <- paste0(controls_liq, " * as.factor(bin)")
 
@@ -40,6 +38,7 @@ control_formulas <- c(
 )
 
 # process one type of data. reg_spec = "nonlinear" or "stdev"
+# TODO: get rid of nonlinear
 p.process_one_type <- function(data, reg_spec = "nonlinear") {
   this_type <- data[1, type]
 
@@ -70,19 +69,8 @@ p.process_one_type <- function(data, reg_spec = "nonlinear") {
 
   return(out_all)
 }
-toc()
 
-# # nonlinear specification---
-# tic("static fm: nonlinear")
-# out_nonlinear <- rbindlist(mclapply(split(data_all, by = "type"), function(x) {
-#   p.process_one_type(x, reg_spec = "nonlinear")
-# }, mc.cores = nc))
-# toc()
-
-# dir.create("tmp/price_impact/regression_contemp/", recursive = T, showWarnings = F)
-
-# stdev-based specification---
-tic("static fm: stdev")
+tic("regression")
 out_stdev <- rbindlist(mclapply(split(data_all, by = "type"), function(x) {
   p.process_one_type(x, reg_spec = "stdev")
 }, mc.cores = nc))
@@ -92,18 +80,12 @@ to_dir <- "../tmp/price_impact/regression_contemp/"
 dir.create(to_dir, recursive = T, showWarnings = F)
 saveRDS(out_stdev, paste0(to_dir, "fm_stdev_substitution.RDS"))
 
-# # === SANITY check: same as earlier?
+# # --- SANITY CHECK: close enough
 
-# new <- readRDS("tmp/price_impact/regression_contemp/fm_stdev_substitution.RDS")[spec_idx %in% 1:3]
-# old <- readRDS("tmp/price_impact/regression_contemp/fm_stdev.RDS")
+# new <- readRDS("../tmp/price_impact/regression_contemp/fm_stdev_substitution.RDS")
+# old <- readRDS("../tmp/price_impact/regression_contemp_todel/fm_stdev_substitution.RDS")
+# dim(new) == dim(old)
 
-# compare <- merge(new, old, by = c("type", "var", "spec_idx"))
-# compare[, cor(coef.x, coef.y)]
-# compare[, cor(se.x, se.y)]
-
-# this_type <- "OFI"
-# dcast(new[(type == this_type) & (var %in% paste0("ofi_bin", 1:3))], var ~ spec_idx, value.var = "coef")
-# dcast(new[(type == this_type) & (var %in% paste0("ofi_bin", 1:3))], var ~ spec_idx, value.var = "se")
-
-# dcast(new[(type == this_type) & grepl("- ofi_bin", var)], var ~ spec_idx, value.var = "coef")
-# dcast(new[(type == this_type) & grepl("- ofi_bin", var)], var ~ spec_idx, value.var = "se")
+# out <- merge(new, old, by = c("spec_idx", "var", "type"))
+# out[, cor(coef.x, coef.y, use = "complete.obs"), type]
+# out[, cor(se.x, se.y, use = "complete.obs"), type]

@@ -52,6 +52,7 @@ data_all <- copy(data)
 rm(data)
 gc()
 
+
 # ###########################################################
 # Fama-MacBeth
 # ###########################################################
@@ -112,7 +113,6 @@ p.process_one_type <- function(data, reg_spec = "nonlinear") {
 
     return(out_all)
 }
-
 
 # on a 6 core machine, takes around 2 mins
 tic()

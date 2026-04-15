@@ -158,8 +158,8 @@ names(col_names) <- as.character(1:ncol(col_names))
 tbl_panelA <- bind_rows(col_names, tbl_panelA); rm(col_names)
 tbl <- copy(tbl_panelA)
 
-align_vactor <- paste0("ll", paste0(rep("c", times = ncol(tbl) - 1), collapse = ""))
-x.side <- xtable(tbl, align = align_vactor)
+align_vector <- paste0("ll", paste0(rep("c", times = ncol(tbl) - 1), collapse = ""))
+x.side <- xtable(tbl, align = align_vector)
 
 this_add_to_row <- list(pos = list(-1, 6, 10, 14, 20), 
                         command = c('\\hline \\multicolumn{10}{c}{Panel A: price impact regressions} \\\\\n \\hline 

@@ -23,7 +23,7 @@ toc()
 
 
 # ###########################################################
-# Fama-MacBeth with nonlinear or stdev-based specification
+# Fama-MacBeth
 # ###########################################################
 
 # control variables for different regression specifications
@@ -34,6 +34,7 @@ control_formulas <- c(
 )
 
 # worker function to estimate regression with one type of demand variable. reg_spec = "nonlinear" or "stdev"
+# TODO: take out nonlinear
 p.process_one_type <- function(data, reg_spec = "nonlinear") {
   this_type <- data[1, type] # parse
 
@@ -90,25 +91,12 @@ p.process_one_type <- function(data, reg_spec = "nonlinear") {
   return(out_all)
 }
 
-
-# # nonlinear specification--- TODO: no longer done, delete in final version
-# tic("static fm: nonlinear")
-# out_nonlinear <- rbindlist(mclapply(split(data_all, by = "type"), function(x) {
-#   p.process_one_type(x, reg_spec = "nonlinear")
-# }, mc.cores = nc))
-# toc()
-
-# to_dir <- "../tmp/price_impact/regression_contemp/"
-# dir.create(to_dir, recursive = T, showWarnings = F)
-# saveRDS(out_nonlinear, paste0(to_dir, "fm_nonlinear.RDS"))
-
 # stdev-based specification---
 tic("static fm: stdev")
 out_stdev <- rbindlist(mclapply(split(data_all, by = "type"), function(x) {
   p.process_one_type(x, reg_spec = "stdev")
 }, mc.cores = nc))
 toc()
-
 
 to_dir <- "../tmp/price_impact/regression_contemp/"
 dir.create(to_dir, recursive = T, showWarnings = F)
@@ -117,13 +105,10 @@ saveRDS(out_stdev, paste0(to_dir, "fm_stdev.RDS"))
 # # === SANITY check. quite similar
 
 # # nonlinear
-# new <- readRDS("../tmp/price_impact/regression_contemp/fm_nonlinear.RDS")
-# old <- readRDS("../tmp/price_impact/regression_contemp_todel/fm_nonlinear.RDS")
+# new <- readRDS("../tmp/price_impact/regression_contemp/fm_stdev.RDS")
+# old <- readRDS("../tmp/price_impact/regression_contemp_todel/fm_stdev.RDS")
 # dim(new) == dim(old)
 
 # out <- merge(new[, .(spec_idx, var, type, coef, se, se_nw)], old[, .(spec_idx, var, type, coef, se, se_nw)], by = c("spec_idx", "var", "type"))
 # out[, cor(coef.x, coef.y, use = "complete.obs"), type]
 # out[, cor(se.x, se.y, use = "complete.obs"), type]
-
-# new[, max(obs), type]
-# old[, max(obs), type]

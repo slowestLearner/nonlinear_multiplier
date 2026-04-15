@@ -56,8 +56,8 @@ rm(col_names)
 # add variable names
 names(data) <- c("", "Obs", "Mean", "StDev", paste0(c(1, 5, 25, 50, 75, 95, 99), "\\%"))
 
-align_vactor <- paste0("ll", paste0(rep("c", times = ncol(data) - 1), collapse = ""))
-x.side <- xtable(data, align = align_vactor)
+align_vector <- paste0("ll", paste0(rep("c", times = ncol(data) - 1), collapse = ""))
+x.side <- xtable(data, align = align_vector)
 
 this_add_to_row <- list(
   pos = list(-1, 0, nrow(data)),

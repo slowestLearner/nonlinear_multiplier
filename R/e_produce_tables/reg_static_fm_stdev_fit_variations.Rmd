@@ -35,7 +35,7 @@ this_spec_idx <- 3
 data <- readRDS("../tmp/price_impact/regression_contemp/fm_stdev.RDS")[type == "FIT" & spec_idx == this_spec_idx]
 data <- data[grepl("ofi_bin", var), .(var, coef, type = "flow_took_out_0_pcs", se, r2, obs, r2_no_ofi)]
 
-tmp <- readRDS("../tmp/price_impact/regression_contemp/alternative_fit/fm_stdev.RDS")[spec_idx == this_spec_idx & origin == "flow"]
+tmp <- readRDS("../tmp/price_impact/regression_contemp/alternative_fit/fm_stdev.RDS")[spec_idx == this_spec_idx & type != "flow"]
 tmp <- tmp[grepl("ofi_bin", var) & type != "flow_resid", .(var, coef, type, se, r2, obs, r2_no_ofi)]
 data <- rbind(data, tmp)
 rm(tmp)
@@ -93,7 +93,7 @@ rm(est, se)
 # note controls
 ctrls <- data.table(var_lab = "Predictor controls", t(rep("Y", ncol(reg_tbl) - 3)))
 ctrls <- rbind(ctrls, data.table(var_lab = "Liquidity controls", t(rep("Y", ncol(reg_tbl) - 3))))
-ctrls[, group_id := 300 + nrow(ctrls)]
+ctrls[, group_id := 300 + 1:nrow(ctrls)]
 ctrls[, type := ""]
 names(ctrls) <- names(reg_tbl)
 reg_tbl <- bind_rows(reg_tbl, ctrls)
@@ -167,8 +167,8 @@ tbl_panelA <- bind_rows(col_names, tbl_panelA)
 rm(col_names)
 tbl <- copy(tbl_panelA)
 
-align_vactor <- paste0("ll", paste0(rep("c", times = ncol(tbl) - 1), collapse = ""))
-x.side <- xtable(tbl, align = align_vactor)
+align_vector <- paste0("ll", paste0(rep("c", times = ncol(tbl) - 1), collapse = ""))
+x.side <- xtable(tbl, align = align_vector)
 
 this_add_to_row <- list(
   pos = list(-1, 6, 8, 12, 18),

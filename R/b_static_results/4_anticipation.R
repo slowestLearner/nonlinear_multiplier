@@ -1,24 +1,20 @@
-# Check if there is anticipatory behavior.
-# Code adapted from 23_are_big_shocks_more_anticipated/3_existing_results.Rmd
-# scripts Takes XX mins to run with 6 cores - is a bit slow. Can remove some unwanted specifications
+# --- use regression to check if there are any anticipation behavior
 library(this.path)
 setwd(this.path::this.dir())
+library(stringr)
 source("../utilities/runmefirst.R")
 source("../utilities/regressions.R")
-library(stringr)
-
 
 tic("loading data")
 
-# All demand and returns
-data <- readRDS("../tmp/raw_data/reg_inputs/all_ofi_and_ret.RDS")
-data <- data[yyyymm >= 199306] # liq-chars are not available for 199303
+# demand and returns
+data <- readRDS("../tmp/raw_data/reg_inputs/all_ofi_and_ret.RDS")[yyyymm >= 199306] # liq-chars are not available for 199303
 data[, ret_freq := ifelse(type == "BMI", "monthly", "quarterly")]
 data[, ret := NULL]
 
 # get returns with more lags
-tmp <- readRDS("../../../data/stocks/prices/quarterly_return.RDS")[, .(yyyymm, permno, ret_freq = "quarterly", ret)]
-tmp <- rbind(tmp, readRDS("../../../data/stocks/prices/monthly_return.RDS")[, .(yyyymm, permno, ret_freq = "monthly", ret)])
+tmp <- readRDS("../../../../data/stocks/prices/quarterly_return.RDS")[, .(yyyymm, permno, ret_freq = "quarterly", ret)]
+tmp <- rbind(tmp, readRDS("../../../../data/stocks/prices/monthly_return.RDS")[, .(yyyymm, permno, ret_freq = "monthly", ret)])
 tmp[, idx := frank(yyyymm, ties.method = "dense"), ret_freq]
 for (i in 1:4) {
     tmp <- merge(tmp, tmp[, .(idx = idx + i, ret_freq, permno, xx = ret)], by = c("idx", "ret_freq", "permno"), all.x = T)
@@ -34,19 +30,20 @@ rm(tmp)
 data <- merge(data, out, by = c("yyyymm", "permno", "ret_freq"), all.x = T, allow.cartesian = T) %>% na.omit()
 rm(out)
 
-# controls that are specific to BMI (NOTE: later these need to be lagged too)
+# controls that are specific to BMI (later these need to be lagged too)
 cdata_bmi <- readRDS("../tmp/raw_data/controls/controls_for_BMI.RDS")
 controls_bmi <- setdiff(names(cdata_bmi), c("yyyymm", "permno"))
 
 # get control variable names
-tmp <- readRDS("../../../formal_tests/20250117_quarterly/tmp/raw_data/controls/controls_classification.RDS")
+tmp <- readRDS("../tmp/raw_data/controls/controls_classification.RDS")
 controls_liq <- tmp[control_type == "liquidity", var]
 controls_char <- tmp[control_type == "return-predictor", var]
 controls_list <- c(controls_char, controls_liq)
 rm(tmp)
 
 # add the other controls
-cdata <- readRDS("../../../formal_tests/20250117_quarterly/tmp/raw_data/controls/quarterly_controls_lagged.RDS")
+# cdata <- readRDS("../../../formal_tests/20250117_quarterly/tmp/raw_data/controls/quarterly_controls_lagged.RDS")
+cdata <- readRDS("../tmp/raw_data/controls/quarterly_controls_lagged.RDS")
 cdata <- cdata[, c("yyyymm", "permno", controls_liq, controls_char), with = F]
 
 # redefine type as type-lag
@@ -69,7 +66,7 @@ data[, hor := as.integer(substr(type, 5, 5)) + 1] # this is used as NW lag
 data_all <- copy(data)
 rm(data)
 
-# Let's index times
+# index times
 time_data <- data.table(yyyymm = unique(cdata[, yyyymm]))[order(yyyymm)]
 time_data[, yyyymm_idx := .I]
 data_all <- merge(data_all, time_data, by = "yyyymm", all.x = T)
@@ -89,9 +86,9 @@ control_formulas <- c(
 )
 
 # process one type of data. reg_spec = "nonlinear" or "stdev"
-# it is a bit wasteful as it does a lot, but can fix later
-# data <- split(data_all, by = "type")[[1]]
-# reg_spec = "stdev"
+# TODO: get rid of nonlinear
+# NOTE: the "BMI" branch is different from elsewhere
+# also, we do not need all those interactions
 p.process_one_type <- function(data, reg_spec = "nonlinear") {
     this_type <- data[1, type]
     this_lag <- as.integer(str_extract(this_type, "\\d+$"))
@@ -129,7 +126,7 @@ p.process_one_type <- function(data, reg_spec = "nonlinear") {
         } else if (reg_spec == "stdev") {
             ff <- paste0("ret ~ ", control_formulas[spec_idx], " + ofi_bin1 + ofi_bin2 + ofi_bin3")
         }
-        if (this_type == "BMI") {
+        if (substr(this_type, 1, 3) == "BMI") {
             ff <- paste0(ff, "+", paste0(controls_bmi, collapse = "+"))
             ff_no_ofi <- paste0(ff_no_ofi, "+", paste0(controls_bmi, collapse = "+"))
         }
@@ -141,30 +138,34 @@ p.process_one_type <- function(data, reg_spec = "nonlinear") {
         out_all <- rbind(out_all, out)
     }
 
-    # then add interactions with ofi
-    for (this_v in c(controls_char, controls_liq)) {
-        # print(this_v)
-        setnames(data, this_v, "xx")
-        data[, yy := xx * ofi]
-        setnames(data, c("xx", "yy"), c(this_v, paste0("ofi_", this_v)))
-        ff <- paste0(ff, " + ofi_", this_v)
-        ff_no_ofi <- paste0(ff_no_ofi, " + ofi_", this_v)
-        spec_idx <- spec_idx + 1
+    # # then add interactions with ofi
+    # for (this_v in c(controls_char, controls_liq)) {
+    #     # print(this_v)
+    #     setnames(data, this_v, "xx")
+    #     data[, yy := xx * ofi]
+    #     setnames(data, c("xx", "yy"), c(this_v, paste0("ofi_", this_v)))
+    #     ff <- paste0(ff, " + ofi_", this_v)
+    #     ff_no_ofi <- paste0(ff_no_ofi, " + ofi_", this_v)
+    #     spec_idx <- spec_idx + 1
 
-        out <- p.fama_macbeth(data, ff, compare_coefs = ifelse(reg_spec == "nonlinear", FALSE, TRUE))
-        out_no_ofi <- p.fama_macbeth(data, ff_no_ofi, compare_coefs = FALSE)
-        out[, r2_no_ofi := out_no_ofi[1, r2]]
-        out[, spec_idx := spec_idx]
-        out_all <- rbind(out_all, out)
-    }
+    #     out <- p.fama_macbeth(data, ff, compare_coefs = ifelse(reg_spec == "nonlinear", FALSE, TRUE))
+    #     out_no_ofi <- p.fama_macbeth(data, ff_no_ofi, compare_coefs = FALSE)
+    #     out[, r2_no_ofi := out_no_ofi[1, r2]]
+    #     out[, spec_idx := spec_idx]
+    #     out_all <- rbind(out_all, out)
+    # }
 
     # name the control variables being added
     tmp <- data.table(
         spec_idx = 1:(length(controls_list) + 3),
-        var_added = c("none_init", "controls_char", "controls_char+controls_liq", controls_list),
+        var_added = c(
+            "none_init", "controls_char", "controls_char+controls_liq"
+            # , controls_list
+        ),
         var_type = c(
-            rep("", 3), rep("return-predicting chars", length(controls_char)),
-            rep("liquidity", length(controls_liq))
+            rep("", 3), rep("return-predicting chars", length(controls_char))
+            # ,
+            # rep("liquidity", length(controls_liq))
         )
     )
     out_all <- merge(out_all, tmp, by = "spec_idx", all.x = T)
@@ -174,7 +175,7 @@ p.process_one_type <- function(data, reg_spec = "nonlinear") {
 }
 
 
-# stdev-based specification--- takes X mins
+# stdev-based specification --- on a 6 core machine, took X mins
 tic("estimating stdev-based specification")
 out_stdev <- rbindlist(mclapply(split(data_all, by = "type"), function(x) {
     p.process_one_type(x, reg_spec = "stdev")
@@ -184,3 +185,14 @@ toc()
 to_dir <- "../tmp/price_impact/regression_contemp/"
 dir.create(to_dir, recursive = T, showWarnings = F)
 saveRDS(out_stdev, paste0(to_dir, "fm_stdev_anticipation.RDS"))
+
+
+# # --- SANITY CHECK: close enough
+
+# new <- readRDS("../tmp/price_impact/regression_contemp/fm_stdev_anticipation.RDS")
+# old <- readRDS("../tmp/price_impact/regression_contemp_todel/fm_stdev_anticipation.RDS")
+# old <- old[spec_idx %in% unique(new[, spec_idx])]
+
+# out <- merge(new, old, by = c("spec_idx", "var", "type"))
+# out[, cor(coef.x, coef.y, use = "complete.obs"), type]
+# out[, cor(se.x, se.y, use = "complete.obs"), type]

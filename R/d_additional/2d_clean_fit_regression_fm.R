@@ -13,7 +13,6 @@ vv <- vv[grepl("ofi", vv)]
 data[, c(vv, "bin") := NULL]
 
 # append new FIT data
-# tmp <- readRDS("../../../data/demand_shocks/j_fit/quarterly_residuals.RDS")[, .(yyyymm, permno, origin, type = flow_type, ofi = fit2shrout_cut01)]
 tmp <- readRDS("../tmp/additional/clean_fit/flow_residuals/2_fit.RDS")[, .(yyyymm, permno, type = flow_type, ofi = fit2shrout_cut01)]
 data <- merge(data, tmp, by = c("yyyymm", "permno"), allow.cartesian = T)
 rm(tmp)
@@ -43,7 +42,7 @@ data_all <- copy(data)
 rm(data)
 
 # ###########################################################
-# Fama-MacBeth with nonlinear or stdev-based specification
+# Fama-MacBeth
 # ###########################################################
 
 # control variables for different specifications
@@ -54,6 +53,7 @@ control_formulas <- c(
 )
 
 # process one type of data. reg_spec = "nonlinear" or "stdev"
+# TODO: remove nonlinear
 p.process_one_type <- function(data, reg_spec = "nonlinear") {
   this_type <- data[1, type]
 
@@ -112,25 +112,7 @@ p.process_one_type <- function(data, reg_spec = "nonlinear") {
 }
 
 
-# # nonlinear specification---
-# tic("static fm: nonlinear")
-# out_nonlinear <- rbindlist(mclapply(split(data_all, by = "type"), function(x) {
-#   p.process_one_type(x, reg_spec = "nonlinear")
-# }, mc.cores = nc))
-# toc()
-
-# to_dir <- "../tmp/price_impact/regression_contemp/"
-# dir.create(to_dir, recursive = T, showWarnings = F)
-# saveRDS(out_nonlinear, paste0(to_dir, "fm_nonlinear.RDS"))
-
-# stdev-based specification---
-# tic("static fm: stdev")
-# out_stdev <- rbindlist(mclapply(split(data_all, by = c("type", "origin")), function(x) {
-#   p.process_one_type(x, reg_spec = "stdev")
-# }, mc.cores = nc))
-# toc()
-
-# takes min mins on a 6 core computer
+# takes X mins on a 6 core computer
 tic("parallel processing: stdev specification")
 plan(multisession, workers = detectCores() - 2)
 out_stdev <- rbindlist(future_lapply(split(data_all, by = c("type")), function(x) {
@@ -143,12 +125,12 @@ to_dir <- "../tmp/price_impact/regression_contemp/alternative_fit/"
 dir.create(to_dir, recursive = T, showWarnings = F)
 saveRDS(out_stdev, paste0(to_dir, "fm_stdev.RDS"))
 
-# # === SANITY check with earlier
+# # === SANITY check: close enough
 
 # new <- readRDS("../tmp/price_impact/regression_contemp/alternative_fit/fm_stdev.RDS")
-# old <- readRDS("../tmp/price_impact/regression_contemp/alternative_fit_todel/fm_stdev.RDS")[origin == "flow"][, origin := NULL]
+# old <- readRDS("../tmp/price_impact/regression_contemp_todel/alternative_fit/fm_stdev.RDS")
 # dim(new) == dim(old)
 
 # out <- merge(new, old, by = c("type", "var", "spec_idx"), all = T)
-# out[, cor(coef.x, coef.y, use = "complete.obs")]
+# out[, cor(coef.x, coef.y, use = "complete.obs"), type]
 # out[, cor(se.x, se.y, use = "complete.obs")]

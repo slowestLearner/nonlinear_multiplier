@@ -92,16 +92,6 @@ p.process_one_type <- function(data, reg_spec = "nonlinear") {
 }
 toc()
 
-# # nonlinear specification--- TODO: delete in final version
-# tic("static panel: nonlinear")
-# out_nonlinear <- rbindlist(mclapply(split(data_all, by = "type"), function(x) {
-#   p.process_one_type(x, reg_spec = "nonlinear")
-# }, mc.cores = nc))
-# toc()
-
-# to_dir <- "../tmp/price_impact/regression_contemp/"
-# dir.create(to_dir, recursive = T, showWarnings = F)
-# saveRDS(out_nonlinear, paste0(to_dir, "panel_nonlinear.RDS"))
 
 # stdev-based specification---
 tic("static panel: stdev")
@@ -114,7 +104,7 @@ to_dir <- "../tmp/price_impact/regression_contemp/"
 dir.create(to_dir, recursive = T, showWarnings = F)
 saveRDS(out_stdev, paste0(to_dir, "panel_stdev.RDS"))
 
-# # === SANITY check: some differences for BMI?
+# # -- SANITY check: small differences
 
 # new <- readRDS("../tmp/price_impact/regression_contemp/panel_stdev.RDS")
 # old <- readRDS("../tmp/price_impact/regression_contemp_todel/panel_stdev.RDS")
@@ -124,7 +114,10 @@ saveRDS(out_stdev, paste0(to_dir, "panel_stdev.RDS"))
 # setkey(old, spec_idx, var, type)
 
 # out <- merge(new[, .(spec_idx, var, type, coef, se)], old[, .(spec_idx, var, type, coef, se)], by = c("spec_idx", "var", "type"))
-# out[, cor(coef.x, coef.y, use = "complete.obs"), type] # WAIT BMI changed so much?
+
+# out[, cor(coef.x, coef.y, use = "complete.obs"), type] # WAIT BMI changed more?
+# out[type == 'BMI', cor(coef.x, coef.y, use = "complete.obs"), spec_idx] # okay almost entirely about the last specification
+
 # out[, cor(se.x, se.y, use = "complete.obs"), type]
 # new[, max(obs), type]
 # old[, max(obs), type]

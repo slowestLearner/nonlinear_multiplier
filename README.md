@@ -32,7 +32,6 @@ TODO later
 
 
 
-
 -`0_not_to_share`: basic data processing, keep to ourselves
 	- `1_copy_upstream_data.R`: DOING
 
@@ -52,10 +51,10 @@ TODO - I think final version needs to remove pre-whitened OFI
 	-DONE. `1_construct_regression_table_static.R`: Prepares static regression dataset by merging demand/returns with controls and generating nonlinear and shock-bin regressors.
 	-DONE. `2a_regression_fm.R`: Runs static Fama-MacBeth regressions (nonlinear and bin-based) across demand types and progressive control specifications.
 	-DONE. `2b_regression_panel.R`: Runs two-way-clustered panel versions of static regressions (mainly bin-based specification) as a robustness counterpart.
-	-DONE `3a_standardized_compute_lagged_vol.R`: Computes rolling 4/8/12-quarter demand volatility measures used to standardize FIT/OFI shocks.
-	- `3b_standardized_regression.R`: Standardizes demand by lagged volatility and reruns static Fama-MacBeth stdev-bin regressions by volatility horizon.
-	- `4_anticipation.R`: Tests anticipation by regressing cumulative future returns (multiple lags) on current demand with lag-adjusted controls.
-	- `5_substitution.R`: Re-estimates static regressions allowing control-by-bin interactions to study substitution/heterogeneous effects.
+	-DONE. `3a_standardized_compute_lagged_vol.R`: Computes rolling 4/8/12-quarter demand volatility measures used to standardize FIT/OFI shocks.
+	-DONE. `3b_standardized_regression.R`: Standardizes demand by lagged volatility and reruns static Fama-MacBeth stdev-bin regressions by volatility horizon.
+	-DONE. `4_anticipation.R`: Tests anticipation by regressing cumulative future returns (multiple lags) on current demand with lag-adjusted controls.
+	-DONE. `5_substitution.R`: Re-estimates static regressions allowing control-by-bin interactions to study substitution/heterogeneous effects.
 
   
 - `c_dynamic_results`
@@ -82,14 +81,14 @@ TODO - I think final version needs to remove pre-whitened OFI
 	- `reg_dynamic_fm_nonlinear_vary_lags.Rmd`: Creates the dynamic nonlinear table while varying lag length (`L=1..4`) to compare how nonlinear demand effects change with lookback.
 	- `reg_dynamic_fm_stdev.Rmd`: Produces the main dynamic FM stdev table using lagged cumulative-demand bins, with controls and coefficient-comparison panel.
 	- `reg_dynamic_fm_stdev_vary_lookback.Rmd`: Outputs a dynamic FM stdev table that holds specification fixed and varies lookback windows to compare bin effects by lag horizon.
-	- DONE. `reg_static_fm_stdev.Rmd`: Produces the baseline static FM stdev table for bin-based demand effects, including controls, fit metrics, and coefficient-difference tests.
-	- `reg_static_fm_stdev_anticipation.Rmd`: Builds an anticipation table that regresses returns on lagged demand bins (`h=1,2,4`) to test pre-return demand signals.
-	- `reg_static_fm_stdev_fit_variations.Rmd`: Creates a FIT-robustness table comparing static FM bin coefficients as increasing numbers of FIT principal components are removed.
+	-DONE. `reg_static_fm_stdev.Rmd`: Produces the baseline static FM stdev table for bin-based demand effects, including controls, fit metrics, and coefficient-difference tests.
+	-DONE. `reg_static_fm_stdev_anticipation.Rmd`: Builds an anticipation table that regresses returns on lagged demand bins (`h=1,2,4`) to test pre-return demand signals.
+	-DONE. `reg_static_fm_stdev_fit_variations.Rmd`: Creates a FIT-robustness table comparing static FM bin coefficients as increasing numbers of FIT principal components are removed.
 	- `reg_static_fm_stdev_reversal.Rmd`: Produces a reversal-horizon table linking current demand bins to future returns (`h=1,2,4`) across BMI/FIT/OFI.
-	- `reg_static_fm_stdev_standardized.Rmd`: Generates a standardized-demand table comparing FIT/OFI bin effects across standardized lookback variants versus unstandardized baselines.
-	- `reg_static_fm_stdev_substitution.Rmd`: Creates a substitution-specification table that swaps in predictor/liquidity-bin interaction structures and reports corresponding coefficient contrasts.
+	-DONE. `reg_static_fm_stdev_standardized.Rmd`: Generates a standardized-demand table comparing FIT/OFI bin effects across standardized lookback variants versus unstandardized baselines.
+	-DONE. `reg_static_fm_stdev_substitution.Rmd`: Creates a substitution-specification table that swaps in predictor/liquidity-bin interaction structures and reports corresponding coefficient contrasts.
 	- `reg_static_fm_stdev_with_demand_interactions.Rmd`: Produces a static FM table that adds demand-bin interactions with predictors and liquidity controls to test heterogeneous price impact.
-	- DONE.  `reg_static_panel_stdev.Rmd`: Generates a static panel-regression counterpart to the FM table for stdev-binned demand effects and coefficient-comparison diagnostics.
+	-DONE.  `reg_static_panel_stdev.Rmd`: Generates a static panel-regression counterpart to the FM table for stdev-binned demand effects and coefficient-comparison diagnostics.
 	- `summary_statistics.Rmd`: Produces the summary-statistics LaTeX table (obs, moments, and percentiles) for returns, demand proxies, and market cap.
 
 ## `f_produce_figures`

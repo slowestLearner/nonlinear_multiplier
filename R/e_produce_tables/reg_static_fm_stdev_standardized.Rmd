@@ -187,9 +187,8 @@ tbl_panelA <- bind_rows(col_names, tbl_panelA)
 rm(col_names)
 tbl <- copy(tbl_panelA)
 
-align_vactor <- paste0("ll", paste0(rep("c", times = ncol(tbl) - 1), collapse = ""))
-x.side <- xtable(tbl, align = align_vactor)
-
+align_vector <- paste0("ll", paste0(rep("c", times = ncol(tbl) - 1), collapse = ""))
+x.side <- xtable(tbl, align = align_vector)
 
 this_add_to_row <- list(
   pos = list(-1, 6, 10, 13, nrow(tbl)), # Check these indices match your final tbl row count
@@ -216,7 +215,6 @@ print(x.side,
   sanitize.text.function = force, # Important to treat content of first column as latex function
   add.to.row = this_add_to_row
 )
-
 
 to_dir <- "../output/tables/"
 dir.create(to_dir, showWarnings = F, recursive = T)
