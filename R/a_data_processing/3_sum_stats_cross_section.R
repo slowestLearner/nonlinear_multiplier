@@ -1,19 +1,19 @@
-# === produce summary statistics as time-series of cross-sectional moments
+# --- produce summary statistics as time-series of cross-sectional moments
 library(this.path)
 setwd(this.path::this.dir())
 source("../utilities/runmefirst.R")
 
 data <- readRDS("../tmp/raw_data/reg_inputs/all_ofi_and_ret.RDS")
-data <- data[yyyymm >= 199306]
+
+# turn into percentages
 data[, ofi := 100 * ofi]
 data[, ret := 100 * ret]
 
 # convert to wide format
 data <- dcast(data, yyyymm + permno + ret ~ type, value.var = "ofi", fun.aggregate = mean)
 
-# get lagged market cap
-tmp <- readRDS("../../../data/stocks/prices/quarterly_return.RDS")
-tmp <- tmp[, .(yyyymm, permno, me_1)]
+# merge with market cap
+tmp <- readRDS("../../../../data/stocks/prices/quarterly_return.RDS")[, .(yyyymm, permno, me_1)]
 data <- merge(data, tmp, by = c("yyyymm", "permno"), all.x = T)
 
 # into long format
@@ -54,24 +54,10 @@ out <- dcast(out, var ~ variable, value.var = "value")
 out <- merge(tmp, out, by = "var")
 rm(tmp)
 
-to_dir <- "../tmp/raw_data/sum_stats/cross_section/"
-dir.create(to_dir, recursive = T, showWarnings = F)
-saveRDS(out, paste0(to_dir, "all.RDS"))
+to_file <- "../tmp/raw_data/sum_stats/all.RDS"
+dir.create(dirname(to_file), showWarnings = FALSE, recursive = TRUE)
+saveRDS(out, to_file)
 
-# # === SANITY CHECK: compare with old results
-
-# # bmi
-# new = readRDS('tmp/raw_data/sum_stats/bmi.RDS')
-# old = readRDS('../20250117_quarterly/tmp/raw_data/sum_stats/bmi.RDS')
-# mean(new == old, na.rm = T)
-
-# # fit and ofi
-# new = readRDS('tmp/raw_data/sum_stats/fit_and_ofi.RDS')[, var := as.character(var)]
-# old = readRDS('../20250117_quarterly/tmp/raw_data/sum_stats/fit_and_ofi.RDS')[, var := as.character(var)]
-# old = old[var != 'OFI']
-# old[var == 'OFI_resid', var := 'OFI']
-
-# new = melt(new, id.vars = 'var')
-# old = melt(old, id.vars = 'var')
-# compare = merge(new, old, by = c('var','variable'), all = T); rm(new, old)
-# compare[, cor(value.x, value.y)]
+# # === SANITY CHECK: sufficiently similar to old results
+# new <- readRDS("../tmp/raw_data/sum_stats/all.RDS")
+# old <- readRDS("../tmp/raw_data/sum_stats_todel/cross_section/all.RDS")

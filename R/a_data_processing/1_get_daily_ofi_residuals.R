@@ -1,18 +1,21 @@
-# === get the unexpected components of OFI in daily data
-source("utilities/runmefirst.R")
+# --- compute unexpected components of OFI in daily data (pre-whitenening)
+# TODO: we don't want this in the final version. Another thing is - this pre-whitenening step is sort of gangster. It runs a separate regression for each day...
+library(this.path)
+setwd(this.path::this.dir())
+source("../utilities/runmefirst.R")
 
 # daily OFI data
-data <- readRDS("../../data/demand_shocks/ofi/daily.RDS")
+data <- readRDS("../../../../data/demand_shocks/ofi/daily.RDS")
 
-# get daily lags
+# get 5 daily lags
 data[, idx := frank(date, ties.method = "dense")] # create an index for trading day
 for (i in 1:5) {
     print(i)
-    data <- merge(data, data[, .(idx = idx + i, permno, xx = ofi)], by = c("idx", "permno"))
+    data <- merge(data, data[, .(idx = idx + i, permno, xx = ofi)], by = c("idx", "permno"), all.x = T)
     setnames(data, "xx", paste0("ofi_", i))
 }
 
-# get weekly lags (assumed 5 days)
+# get weekly lags (each week is 5 trading days)
 data[, ofi_1w := ofi_1 + ofi_2 + ofi_3 + ofi_4 + ofi_5]
 for (i in 1:3) {
     print(i)
@@ -20,7 +23,7 @@ for (i in 1:3) {
     setnames(data, "xx", paste0("ofi_", (i + 1), "w"))
 }
 
-# get monthly lags (assumed 21 days)
+# get monthly lags (each month is 21 trading days)
 data[, ofi_1m := ofi + ofi_1w + ofi_2w + ofi_3w + ofi_4w]
 data[, ofi_1w := NULL]
 for (i in 1:11) {
@@ -29,23 +32,20 @@ for (i in 1:11) {
     setnames(data, "xx", paste0("ofi_", (i + 1), "m"))
 }
 rm(i)
+data[, idx := NULL]
+data <- data %>% na.omit()
 gc()
-data <- data[0 == rowSums(is.na(data))]
 
-# # == take a look at full sample
-# ff = paste0('ofi ~ ', paste0(paste0('ofi_', 1:5), collapse = ' + '))
-# ff = paste0(ff, ' + ', paste0(paste0('ofi_', 2:4, 'w'), collapse = ' + '))
-# ff = paste0(ff, ' + ', paste0(paste0('ofi_', 2:12, 'm'), collapse = ' + '), ' | date')
+# --- estimate OFI residuals by day
 
-# === estimate OFI residuals in a rolling window
 
-# rergession formula
-ff <- paste0("ofi ~ ", paste0(paste0("ofi_", 1:5), collapse = " + "))
-ff <- paste0(ff, " + ", paste0(paste0("ofi_", 2:4, "w"), collapse = " + "))
-ff <- as.formula(paste0(ff, " + ", paste0(paste0("ofi_", 2:12, "m"), collapse = " + ")))
-
-# function to estimate residual for a subset of data
+# worker function to estimate by day. return both residuals and coefficients
 p.get_one <- function(subdata) {
+    # regression formula
+    ff <- paste0("ofi ~ ", paste0(paste0("ofi_", 1:5), collapse = " + "))
+    ff <- paste0(ff, " + ", paste0(paste0("ofi_", 2:4, "w"), collapse = " + "))
+    ff <- as.formula(paste0(ff, " + ", paste0(paste0("ofi_", 2:12, "m"), collapse = " + ")))
+
     mm <- lm(ff, subdata)
     subdata[, ofi_resid := mm$residuals]
 
@@ -55,46 +55,55 @@ p.get_one <- function(subdata) {
     ))
 }
 
+# process by date
 data_list <- split(data, by = "date")
+rm(data)
+gc()
 
 nc <- parallel::detectCores() - 2
-block_size <- 500 # Adjust this number based on your memory/performance needs
-num_blocks <- ceiling(length(data_list) / block_size)
+block_size <- 1000
+tmp <- data.table(idx = 1:length(data_list))
+tmp[, block_idx := ceiling(idx / block_size)]
+
+# why is this initially so slow?
 
 # on a computer with 6 cores, this takes around a min
 out <- list() # To store all results
-for (i in 2:num_blocks) {
-    print(i / num_blocks)
+for (i in unique(tmp[, block_idx])) {
+    print(i / max(tmp[, block_idx]))
     tic()
-    start_idx <- (i - 1) * block_size + 1
-    end_idx <- min(i * block_size, length(data_list))
-    out <- c(out, parallel::mclapply(data_list[start_idx:end_idx], p.get_one, mc.cores = nc))
+    # start_idx <- (i - 1) * block_size + 1
+    # end_idx <- min(i * block_size, length(data_list))
+    # out <- c(out, parallel::mclapply(data_list[start_idx:end_idx], p.get_one, mc.cores = nc))
+    out <- c(out, parallel::mclapply(data_list[tmp[block_idx == i, idx]], p.get_one, mc.cores = nc))
     gc()
     toc()
 }
-rm(i, num_blocks, block_size, start_idx, end_idx, ff)
+rm(i, block_size, p.get_one, tmp)
 stopifnot(length(out) == length(data_list))
 
-# coef estimates
+# combine coef estimates and residuals
 coefdata <- rbindlist(lapply(out, `[[`, 1))
 ofidata <- rbindlist(lapply(out, `[[`, 2))
 ofidata[, ofi := NULL]
 
-dir.create("tmp/raw_data/cleaning/ofi/", showWarnings = F, recursive = T)
-saveRDS(coefdata, "tmp/raw_data/cleaning/ofi/fm_regression_coefs.RDS")
-saveRDS(ofidata, "tmp/raw_data/cleaning/ofi/residual_daily_ofi.RDS")
+# save coef estimates
+to_file <- "../tmp/raw_data/cleaning/ofi/fm_regression_coefs.RDS"
+dir.create(dirname(to_file), showWarnings = FALSE, recursive = TRUE)
+saveRDS(coefdata, to_file)
 
-# # === SANITY: check with earlier data
+# save ofi residuals
+to_file <- "../tmp/raw_data/cleaning/ofi/residual_daily_ofi.RDS"
+dir.create(dirname(to_file), showWarnings = FALSE, recursive = TRUE)
+saveRDS(ofidata, to_file)
 
-# # coefs
-# old = readRDS('../20250117_quarterly/tmp/raw_data/cleaning/ofi/fm_regression_coefs.RDS')
-# new = readRDS('tmp/raw_data/cleaning/ofi/fm_regression_coefs.RDS')
-# mean(old == new)
+# # # === SANITY: sufficiently similar
 
-# # residuals - no problem here
-# old = readRDS('../20250117_quarterly/tmp/raw_data/cleaning/ofi/residual_daily_ofi.RDS')
-# new = readRDS('tmp/raw_data/cleaning/ofi/residual_daily_ofi.RDS')
-# dim(old) == dim(new)
-# mean(old == new)
-# compare = merge(old, new, by = c('date','permno')); rm(old,new)
-# compare[(date == '1994-03-25') & (permno == 10119)]
+# # coefs: sufficient similar
+
+# # residuals - end up with slightly more data now, after fixing a bug
+# new <- readRDS('../tmp/raw_data/cleaning/ofi/residual_daily_ofi.RDS')
+# old <- readRDS('../tmp/raw_data/cleaning/ofi_todel/residual_daily_ofi.RDS')
+# new <- new[date %in% unique(old$date)]
+# tt <- merge(new, old, by = c('date','permno'))
+# tt[, cor(ofi_resid.x, ofi_resid.y)]

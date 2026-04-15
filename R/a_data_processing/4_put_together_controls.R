@@ -1,11 +1,11 @@
-# === script to put together controls for regressions
+# --- combine various controls that are later used in regressions
 library(this.path)
 setwd(this.path::this.dir())
 source("utilities/runmefirst.R")
 
 
 # liquidity chars
-data <- readRDS("../../../data/stocks/controls/monthly_liquidity_measures_not_lagged.RDS")
+data <- readRDS("../../../../data/stocks/controls/monthly_liquidity_measures_not_lagged.RDS")
 setnames(data, "me", "size") # to not overlap with size in characteristics
 vv_liq <- setdiff(names(data), c("yyyymm", "permno")) # keep track of liquidity variable names
 

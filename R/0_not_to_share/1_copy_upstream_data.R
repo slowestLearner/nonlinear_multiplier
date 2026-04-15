@@ -61,15 +61,8 @@ to_file <- "../../../../data/demand_shocks/j_fit/quarterly.RDS"
 dir.create(dirname(to_file), recursive = T, showWarnings = F)
 saveRDS(tmp, to_file)
 
-# # sanity check: identical
-# tt <- readRDS('../../../../data/demand_shocks/j_fit/quarterly_updated_20250313_todel.RDS')
-# dim(tmp) == dim(tt)
-# mean(tmp == tt)
+# --- liquidity-related variables, downloaded from TAQ and processed
+data <- readRDS("~/Desktop/J-Leaves/data/stockprices/processed/taq/liquidity/monthly_file.RDS")
 
-# # --- flow residuals
-# data <- readRDS("../../../tests/27_alternative_fit_construtions/tmp/raw_data/flow_residuals/2_pca_include_raw_origin.RDS")
-# saveRDS(data, "../../../data/demand_shocks/j_fit/quarterly_flow_residuals.RDS")
 
-# # -- FIT residuals (later port over the upstream processing code)
-# data <- readRDS("../../../tests/27_alternative_fit_construtions/tmp/raw_data/flow_residuals/3_fit_include_raw_origin.RDS")
-# saveRDS(data, "../../../data/demand_shocks/j_fit/quarterly_residuals.RDS")
+tmp <- readRDS("~/Desktop/J-Leaves/data/stockprices/processed/taq/liquidity/daily_file.RDS")

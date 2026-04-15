@@ -1,47 +1,39 @@
-# === Put together the monthly/quarterly data for main regressions
-
-# load libraries
+# --- put together quarterly data for regressions (1993 to 2022)
 library(this.path)
 setwd(this.path::this.dir())
 source("../utilities/runmefirst.R")
 
-# == 1) Put together quarterly OFI/FIT and return data.
+# --- 1) combine OFI, FIT, and returns
 
-# quarterly stock returns
-stock_data <- readRDS("../../../data/stocks/prices/quarterly_return.RDS")
-stock_data <- stock_data[, list(yyyymm, permno, ret)]
+# stock returns
+stock_data <- readRDS("../../../../data/stocks/prices/quarterly_return.RDS")[, .(yyyymm, permno, ret)]
 
-# FIT. Pick a cleaned version
-data <- readRDS("../../../data/demand_shocks/j_fit/quarterly_updated_20250313.RDS")[, list(yyyymm, permno, type = "FIT", ofi = fit_adj_cut01)]
+# FIT
+data <- readRDS("../../../../data/demand_shocks/j_fit/quarterly.RDS")[, .(yyyymm, permno, type = "FIT", ofi = fit_adj_cut01)]
 
-# pre-whitened OFI
+# pre-whitened daily OFI, aggregate to quarterly
 tmp <- readRDS("../tmp/raw_data/cleaning/ofi/residual_daily_ofi.RDS")
-tmp[, ofi_resid := DescTools::Winsorize(ofi_resid, val = quantile(ofi_resid, probs = c(.005, .995)))]
+# tmp[, ofi_resid := DescTools::Winsorize(ofi_resid, val = quantile(ofi_resid, probs = c(.005, .995)))]
 tmp[, yyyymm := 100 * year(date) + 3 * quarter(date)]
 tmp <- tmp[, .(obs = length(date), type = "OFI_pre_whitened", ofi = sum(ofi_resid)), .(yyyymm, permno)]
 tmp[, max_obs := max(obs), yyyymm]
-tmp <- tmp[obs >= (max_obs - 5)] # need to have data for most days in the quarter
-tmp[, c("obs", "max_obs") := NULL]
+tmp <- tmp[obs >= (max_obs - 5)][, c("obs", "max_obs") := NULL] # need to have data for most days in the quarter
 data <- rbind(data, tmp)
 rm(tmp)
 
-# non-pre-whitened OFI
-tmp <- readRDS("../../../data/demand_shocks/ofi/quarterly.RDS")[, type := "OFI"]
+# original OFI
+tmp <- readRDS("../../../../data/demand_shocks/ofi/quarterly.RDS")[, type := "OFI"]
 data <- rbind(data, tmp)
 rm(tmp)
 
 # merge with stock data
-data <- merge(stock_data, data, by = c("yyyymm", "permno"), allow.cartesian = T)
-rm(stock_data)
-data_fit_and_ofi <- copy(data)
-rm(data)
+data_fit_and_ofi <- merge(stock_data, data, by = c("yyyymm", "permno"), allow.cartesian = T)
+rm(stock_data, data)
 
-
-# === 2) add BMI to the quarterly OFI/FIT tables. Make sure data is unique
-source("../utilities/runmefirst.R")
+# -- 2) add BMI to the quarterly OFI/FIT tables. keep track of associated controls as well
 
 # data <- data.table(haven::read_stata("../../../tests/9_russell_rdd/russell_rdd_stock_level_panel.dta"))
-data <- readRDS("../../../data/demand_shocks/bmi/russell_rdd_stock_level_panel.RDS")
+data <- readRDS("../../../../data/demand_shocks/bmi/russell_rdd_stock_level_panel.RDS")
 
 # Calculate the log of tot_mktcap_r3
 data$log_tot_mktcap_r3 <- log(data$tot_mktcap_r3)
@@ -65,7 +57,7 @@ bandwidth <- 150
 data[, filter := 0]
 data[((abs(dist_up) <= bandwidth) | (abs(dist_down) <= bandwidth)), filter := 1]
 
-# compute changes in BMI. bmi is in May, bmi_june is in June. Reccale
+# compute changes in BMI. bmi is in May, bmi_june is in June. Rescale, following the original BMI paper
 data[, d_bmi := bmi_june - bmi]
 data[, d_bmi := .2 * d_bmi]
 data <- data[!is.na(d_bmi) & !is.na(full_ret)]
@@ -85,29 +77,36 @@ data <- data[idx == 1][, idx := NULL]
 
 # combine with FIT and OFI data
 reg_data <- rbind(data[, .(yyyymm, permno, type = "BMI", ret, ofi)], data_fit_and_ofi)
-to_dir <- "../tmp/raw_data/reg_inputs/"
-dir.create(to_dir, recursive = T, showWarnings = F)
-saveRDS(reg_data, paste0(to_dir, "/all_ofi_and_ret.RDS"))
-rm(reg_data)
+reg_data <- reg_data[yyyymm >= 199306 & yyyymm <= 202212] # the main sample period for the paper
+to_file <- "../tmp/raw_data/reg_inputs/all_ofi_and_ret.RDS"
+dir.create(dirname(to_file), showWarnings = FALSE, recursive = TRUE)
+saveRDS(reg_data, to_file)
 
 # also save BMI-specific controls
 data <- data[, c("yyyymm", "permno", PS_controls), with = F]
-to_dir <- "../tmp/raw_data/controls/"
-dir.create(to_dir, recursive = T, showWarnings = F)
-saveRDS(data, paste0(to_dir, "/controls_for_BMI.RDS"))
 
-# # === SANITY: check with earlier data
+to_file <- "../tmp/raw_data/controls/controls_for_BMI.RDS"
+dir.create(dirname(to_file), showWarnings = FALSE, recursive = TRUE)
+saveRDS(data, to_file)
+
+# # --- SANITY: quite similar to earlier data
 
 # # BMI controls
-# old = readRDS('../20250117_quarterly/tmp/raw_data/controls/controls_for_BMI.RDS')
-# new = readRDS('tmp/raw_data/controls/controls_for_bmi.RDS')
+# old <- readRDS("../../../20250117_quarterly/tmp/raw_data/controls/controls_for_BMI.RDS")
+# new <- readRDS("../tmp/raw_data/controls/controls_for_bmi.RDS")
+
+# # keep unique ones
+# old[, obs := .N, .(yyyymm, permno)]
+# old <- old[obs == 1][, obs := NULL]
+# new <- merge(new, old[, .(yyyymm, permno)], by = c("yyyymm", "permno"))
+# setkey(old, yyyymm, permno)
+# setkey(new, yyyymm, permno)
 # mean(old == new, na.rm = T)
 
 # # demand data
-# old = readRDS('../20250117_quarterly/tmp/raw_data/reg_inputs/all_ofi_and_ret.RDS')
-# old = old[type != 'OFI']
-# old[type == 'OFI_resid', type := 'OFI']
-# new = readRDS('tmp/raw_data/reg_inputs/all_ofi_and_ret.RDS')
-# dim(new) == dim(old)
-# compare = merge(old, new, by = c('yyyymm','permno','type')); rm(old,new)
-# compare[, cor(ofi.x, ofi.y), type]
+# old <- readRDS("../tmp/raw_data/reg_inputs_todel/all_ofi_and_ret.RDS")
+# new <- readRDS("../tmp/raw_data/reg_inputs/all_ofi_and_ret.RDS")
+# out <- merge(old, new, by = c("yyyymm", "permno", "type"), all = T)
+
+# out <- out %>% na.omit() # only old, OFI-pre-whitened may be missing
+# out[, cor(ofi.x, ofi.y), type] # only OFI-pre-whitened somewhat changed, and it does not matter
