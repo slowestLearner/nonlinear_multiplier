@@ -39,7 +39,7 @@ data[, idx := NULL]
 
 data <- data %>%
   dplyr::mutate(var = c("Quarterly return (\\%)", "Demand ($\\Delta$BMI, \\%)", "Demand (FIT, \\%)", "Demand (OFI, \\%)", "Market cap (\\$m)")) %>%
-  dplyr::mutate(obs = comma(obs))
+  dplyr::mutate(obs = comma(obs, accuracy = 1))
 
 # format numbers
 data_first <- data[1:4, ] %>% dplyr::mutate_at(vars(3:ncol(.)), ~ sprintf("%.2f", round(., 2)))

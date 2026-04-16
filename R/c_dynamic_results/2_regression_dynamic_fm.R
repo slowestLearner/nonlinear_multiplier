@@ -1,4 +1,4 @@
-# Dynamic regression of returns on demand. On a 6-core machine took around 1 min
+# --- Dynamic regression of returns on demand
 library(this.path)
 setwd(this.path::this.dir())
 source("../utilities/runmefirst.R")
@@ -23,7 +23,7 @@ data_reg <- data_reg[0 == rowSums(is.na(data_reg))]
 data_reg[, hor := as.integer(gsub("cumofi_", "", hor))]
 rm(data, vars_id, vars_reg, vars_controls)
 
-# change the name so old code can easily be applied
+# change some variable names
 data_reg[, demand_type := type]
 data_reg[, type := paste0(demand_type, "_", hor, "lag")]
 data_reg[, sd_ofi := sd(cumofi_lag), .(yyyymm, type)]
@@ -45,7 +45,7 @@ rm(cdata)
 toc()
 
 # ###########################################################
-# Fama-MacBeth with nonlinear or stdev-based specification
+# Fama-MacBeth
 # ###########################################################
 
 # control variables for different specifications
@@ -55,9 +55,10 @@ control_formulas <- c(
   paste0(c(controls_char, controls_liq), collapse = "+")
 )
 
-# -- process one type of data. reg_spec = "nonlinear" or "stdev"
-# loops through various specifications. Start with adding direct controls (in steps), and then
-# start adding interactios with ofi one step at a time
+# worker function
+# currently, on a 6 core machine, this takes 4 mins to run
+# TODO: remove nonlinear
+# TODO: this code takes quite a while to run, as it really only uses the last spec... consider shortening?
 p.process_one_type <- function(data, reg_spec = "nonlinear") {
   data <- merge(data, data_controls, by = c("yyyymm", "permno", "demand_type"), all.x = T)
   data <- data[0 == rowSums(is.na(data))]
@@ -72,9 +73,9 @@ p.process_one_type <- function(data, reg_spec = "nonlinear") {
     } else if (reg_spec == "stdev") {
       ff <- paste0("ret ~ ", control_formulas[spec_idx], " + ofi_bin1 + ofi_bin2 + ofi_bin3")
     }
-    if (this_type == "BMI") {
-      ff <- paste0(ff, "+", paste0(controls_bmi, collapse = "+"))
-    }
+    # if (this_type == "BMI") {
+    #   ff <- paste0(ff, "+", paste0(controls_bmi, collapse = "+"))
+    # }
     out <- p.fama_macbeth(data, ff, compare_coefs = ifelse(reg_spec == "nonlinear", FALSE, TRUE))
     out[, spec_idx := spec_idx]
     out_all <- rbind(out_all, out)
@@ -108,44 +109,16 @@ p.process_one_type <- function(data, reg_spec = "nonlinear") {
   return(out_all)
 }
 
-# nonlinear---
-tic("dynamic fm: nonlinear")
-out_nonlinear <- rbindlist(mclapply(split(data_reg, by = "type"), function(x) {
-  p.process_one_type(x, reg_spec = "nonlinear")
-}, mc.cores = nc))
 
-# also get cum_d_sd
-sd_data <- data_reg[, .(cum_d_sd = sd(cumofi_lag)), .(type)]
-out_nonlinear <- merge(out_nonlinear, sd_data, by = "type")
-rm(sd_data)
-
-to_dir <- "../tmp/price_impact/regression_dynamic/"
-dir.create(to_dir, recursive = T, showWarnings = F)
-saveRDS(out_nonlinear, paste0(to_dir, "fm_nonlinear.RDS"))
-toc()
-
-# stdev-based specification---
-tic("dynamic fm: stdev")
+tic("dynamic regression")
 out_stdev <- rbindlist(mclapply(split(data_reg, by = "type"), function(x) {
   p.process_one_type(x, reg_spec = "stdev")
 }, mc.cores = nc))
 
-# also get TS average of XS SD
+# also get time-series average of cross-sectional standard eviations
 sd_data <- data_reg[, .(cum_d_sd = sd(cumofi_lag)), .(type, yyyymm)][, .(cum_d_sd = mean(cum_d_sd)), .(type)]
 out_stdev <- merge(out_stdev, sd_data, by = "type")
 rm(sd_data)
-
-# # --- take a look at results
-# out <- out_stdev[spec_idx == 3]
-# out <- out[grepl("ofi", var)]
-# tt <- unique(out[, .(var)])[, var_idx := .I][, var_lab := paste0(var_idx, "_", var)]
-# out <- merge(out, tt, by = "var")
-# rm(tt)
-# out[, type_lab := paste0(type, "_", spec_idx)]
-# out[, tstat := coef / se]
-# out <- out[grepl("OFI", type)]
-# dcast(out, var_lab ~ type, value.var = c("coef"))
-# dcast(out, var_lab ~ type, value.var = c("tstat"))
 
 to_dir <- "../tmp/price_impact/regression_dynamic/"
 dir.create(to_dir, recursive = T, showWarnings = F)
@@ -153,91 +126,13 @@ saveRDS(out_stdev, paste0(to_dir, "fm_stdev.RDS"))
 toc()
 
 
-# # # === SANITY check (i tink old version had wrong standard errors)
+# # --- SANITY CHECK: close enough
 
-# # --- nonlinear specification
-# new <- readRDS("tmp/price_impact/regression_dynamic/fm_nonlinear.RDS")
-# old <- readRDS("../20250117_quarterly/tmp/price_impact/regression_with_lagged_interaction/fm_quarterly_without_direction.RDS")
-# old <- old[type != "OFI"]
-# old[type == "OFI_resid", type := "OFI"]
+# new <- readRDS("../tmp/price_impact/regression_dynamic/fm_stdev.RDS")
+# old <- readRDS("../tmp/price_impact/regression_dynamic_todel/fm_stdev.RDS")
+# dim(new) == dim(old)
 
-# # choose specification
-# new <- new[spec_idx == 3][, spec_idx := NULL]
-
-# # choose variables
-# new <- new[var %in% c("ofi", "ofi_absofi")]
-# old[var == "I(ofi * abs(cumofi_prev))", var := "ofi_absofi"]
-# common_vars <- intersect(unique(new[, var]), unique(old[, var]))
-# new <- new[var %in% common_vars]
-# old <- old[var %in% common_vars]
-# rm(common_vars)
-
-# # get joint variables
-# old[, type := paste0(type, "_", lag, "lag")]
-# vv <- intersect(names(new), names(old))
-# new <- new[, ..vv]
-# old <- old[, ..vv]
-# rm(vv)
-
-# # adjust sizes
-# new[var == "ofi_absofi", coef := coef / 100]
-# new[var == "ofi_absofi", se := se / 100]
-# new[, cum_d_sd := cum_d_sd * 100]
-
-# # compare
-# compare <- merge(new, old, by = c("type", "var"), all = T)
-# stopifnot(nrow(compare) == nrow(new))
-# rm(new, old)
-
-# compare[, mean(abs(coef.x - coef.y)) / mean(abs(coef.x))]
-# compare[, mean(abs(se.x - se.y)) / mean(abs(se.x))]
-# compare[, mean(abs(obs.x - obs.y)) / mean(abs(obs.x))]
-# compare[, mean(abs(r2.x - r2.y)) / mean(abs(r2.x))]
-# compare[, mean(abs(cum_d_sd.x - cum_d_sd.y)) / mean(abs(cum_d_sd.x))]
-
-
-# # --- stdev-based specification
-# new <- readRDS("tmp/price_impact/regression_dynamic/fm_stdev.RDS")
-# old <- readRDS("../20250117_quarterly/tmp/price_impact/regression_with_lagged_interaction/fm_quarterly_by_stdev_based_bins.RDS")
-# old <- old[type != "OFI"]
-# old[type == "OFI_resid", type := "OFI"]
-
-# # choose specification
-# new <- new[spec_idx == 3][, spec_idx := NULL]
-
-# # choose variables
-# new[, var := gsub("ofi_bin", "M", var)]
-# new[, var := gsub(" ", "", var)]
-# common_vars <- intersect(unique(new[, var]), unique(old[, var]))
-# new <- new[var %in% common_vars]
-# old <- old[var %in% common_vars]
-# rm(common_vars)
-
-# # get joint variables
-# old[, type := paste0(type, "_", lag, "lag")]
-# vv <- intersect(names(new), names(old))
-# new <- new[, ..vv]
-# old <- old[, ..vv]
-# rm(vv)
-
-# # adjust coef size
-# new[, cum_d_sd := cum_d_sd * 100]
-
-# # compare
-# compare <- merge(new, old, by = c("type", "var"), all = T)
-# stopifnot(nrow(compare) == nrow(new))
-# rm(new, old)
-
-# compare[, mean(abs(coef.x - coef.y)) / mean(abs(coef.x))]
-# compare[, mean(abs(se.x - se.y)) / mean(abs(se.x))]
-# compare[, mean(abs(obs.x - obs.y)) / mean(abs(obs.x))]
-# compare[, mean(abs(r2.x - r2.y)) / mean(abs(r2.x))]
-# compare[, mean(abs(cum_d_sd.x - cum_d_sd.y)) / mean(abs(cum_d_sd.x))]
-
-# # not the same
-# compare[type == "OFI_4lag", .(se.x / se.y)]
-
-# compare[, cor(coef.x, coef.y)]
-# compare[, cor(se.x, se.y)] # this is somehow not identical, but sufficiently similar?
-# compare[, cor(obs.x, obs.y)]
-# compare[, cor(r2.x, r2.y)]
+# out <- merge(new, old, by = c("spec_idx", "var", "type"))
+# out[, cor(coef.x, coef.y, use = "complete.obs"), type]
+# out[, cor(se.x, se.y, use = "complete.obs"), type]
+# out[, max(obs.x) / max(obs.y), type]

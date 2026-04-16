@@ -43,6 +43,7 @@ toc()
 
 # Plot
 for (this_type in unique(data_all[, type])) {
+  # this_type <- 'FIT'
   tic(paste0("Plotting ", this_type))
   data <- copy(data_all[type == this_type])
   data <- data[order(spec_idx)]

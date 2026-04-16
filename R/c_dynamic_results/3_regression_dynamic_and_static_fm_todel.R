@@ -1,6 +1,4 @@
-# Contemp + dynamic regression, inspired by Val's question
-# should make the contemp bin3 the baseline
-# code modified from code/c_dynamic_results/2_regression_dynamic_fm.R
+# --- a specification with both contemp and dynamic demand
 library(this.path)
 setwd(this.path::this.dir())
 source("../utilities/runmefirst.R")

@@ -248,19 +248,6 @@ this_add_to_row <- list(
   )
 )
 
-# this_add_to_row <- list(
-#   pos = list(-1, 0, 0, 6, 10, 13, nrow(tbl)),
-#   command = c(
-#     "\\hline \\multicolumn{11}{c}{Panel A: price impact regressions} \\\\\n \\hline
-#     & \\multicolumn{10}{c}{Dependent variable: stock return $r_{n,t}$} \\\\\n
-#     \\cmidrule(l){2-11} $d_{n,t} = $ & \\multicolumn{5}{c}{FIT} & \\multicolumn{5}{c}{OFI} \\\\\n \\cmidrule(l){2-6} \\cmidrule(l){7-11} \n",
-#     "\\cmidrule(l){2-6} \\cmidrule(l){7-11}",
-#     rep("\\vspace{5pt}", 3),
-#     "\\hline \\multicolumn{11}{c}{Panel B: Coefficient differences} \\\\\n \\hline",
-#     "\\hline \n"
-#   )
-# )
-
 # Print to console
 print(x_table,
   type = "latex",

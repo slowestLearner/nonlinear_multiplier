@@ -1,17 +1,13 @@
-# --- figure out whether BMI's pass-through rate depend has variability
-# code modified from 26_bmi_pass_through/2_bmi_regressions.R
+# --- examine whether the pass-through rate of BMI to changes in IO varies
 library(this.path)
 setwd(this.path::this.dir())
 source("../utilities/runmefirst.R")
 
-# merge bmi with io changes
+# merge bmi with IO changes
 data <- readRDS("../tmp/raw_data/reg_inputs/reg_table_static.RDS")[type == "BMI"][, type := NULL]
-tmp <- readRDS("../../../data/institutional/s34_io_changes.RDS")
+tmp <- readRDS("../../../../data/institutional/s34_io_changes.RDS")
 data <- merge(data, tmp, by = c("yyyymm", "permno"))
 rm(tmp)
-
-# # winsorize weird stuff
-# data[, dio := Winsorize(dio, quantile(dio, probs = c(0.01, 0.99)))]
 
 # get control variable names
 cdata <- readRDS("../tmp/raw_data/controls/controls_classification.RDS")
@@ -32,12 +28,10 @@ formula_data <- rbind(formula_data, data.table(idx = 2, formula = paste0("dio ~ 
 formula_data <- rbind(formula_data, data.table(idx = 3, formula = paste0("dio ~ ofi_bin1 + ofi_bin2 + ofi_bin3 + ", paste(c(controls_bmi, controls_char, controls_liq), collapse = " + "), " | yyyymm")))
 
 
-# helper function
+# worker function to estimate regression for each period
 p.get_one_regression <- function(this_data) {
-  # this_data <- data_list[[1]]
   reg_out <- data.table()
   for (this_idx in formula_data[, idx]) {
-    # this_idx <- formula_data[, idx]
     this_formula <- formula_data[idx == this_idx, formula]
     this_reg <- feols(as.formula(this_formula), data = this_data)
     reg_out <- rbind(reg_out, data.table(
@@ -52,16 +46,14 @@ p.get_one_regression <- function(this_data) {
 data_list <- split(data, by = "yyyymm")
 out <- rbindlist(lapply(data_list, p.get_one_regression))
 
-# Let's summarize including the pairwise differences
+# summarize
 out_list <- split(out, by = "idx")
 
 p.get_one_summary <- function(this_out) {
-  # this_out <- out_list[[1]]
-
-
   X <- dcast(this_out, yyyymm ~ var, value.var = "coef")
   mu <- matrix(colMeans(X[, -1]))
-  C <- cor(X[, -1]) / sqrt(nrow(X))
+  C <- cov(X[, -1]) / nrow(X)
+  # C <- cor(X[, -1]) / sqrt(nrow(X))
 
   out <- data.table(
     var = paste0("ofi_bin", 1:3),
@@ -95,6 +87,19 @@ to_file <- "../tmp/additional/bmi_pass_thru.RDS"
 dir.create(dirname(to_file), recursive = T, showWarnings = F)
 saveRDS(out, to_file)
 
-# options(width = 200)
-# dcast(out, var_lab ~ spec_lab, value.var = "coef")
-# dcast(out, var_lab ~ spec_lab, value.var = "tstat")
+# # --- SANITY CHECK: hmm I fixed an error. The earlier calculation of covariance is incorrect
+
+# new <- readRDS('../tmp/additional/bmi_pass_thru.RDS')
+# old <- readRDS('../tmp/additional/bmi_pass_thru_todel.RDS')
+# dim(new) == dim(old)
+
+# dim(new)
+# dim(unique(new[, .(var, spec_lab)]))
+
+# out <- merge(new, old, by = c("var", "spec_lab"))
+# out[, cor(coef.x, coef.y, use = "complete.obs")]
+# out[, cor(tstat.x, tstat.y, use = "complete.obs")]
+# out[, median(se.x/se.y)]
+# out[, cor(se.x, se.y, use = "complete.obs")]
+# out[, cor(obs.x, obs.y, use = "complete.obs")]
+# out[, cor(r2.x, r2.y, use = "complete.obs")]
