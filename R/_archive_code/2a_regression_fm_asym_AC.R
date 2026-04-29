@@ -7,7 +7,7 @@ source("../utilities/regressions.R")
 # load regression data
 pos_neg_suffix = 'neg'
 data_all <- readRDS(paste("../tmp/raw_data/reg_inputs/reg_table_static_", pos_neg_suffix,"_ofi.RDS", sep =""))
-# data_all = data_all[data_all$ofi > 0, ]
+data_all = data_all[data_all$ofi != 0, ]
 
 # get control variable names
 cdata <- readRDS("../tmp/raw_data/controls/controls_classification.RDS")

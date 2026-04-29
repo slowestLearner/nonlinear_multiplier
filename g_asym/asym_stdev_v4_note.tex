@@ -1,0 +1,204 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage{amsmath}
+\usepackage{float}
+\usepackage{graphicx}
+\usepackage{adjustbox}
+
+\begin{document}
+
+\section*{Asymmetric Demand Multipliers by Shock Size: v4}
+
+This note reports the v4 pooled positive/negative specification. Like v3, v4
+keeps positive and negative shocks in the same monthly cross-section and
+estimates six sign-specific bin slopes in one regression. The difference is
+that v4 rebuilds the positive and negative bins directly from raw demand using
+sign-specific standard deviations within each demand type and month.
+
+For each demand type and month, define
+\[
+\sigma^+_t = \operatorname{sd}(d_{n,t} \mid d_{n,t} > 0), \qquad
+\sigma^-_t = \operatorname{sd}(d_{n,t} \mid d_{n,t} < 0).
+\]
+The six regressors are
+\begin{align*}
+d^{(1),+}_{n,t} &= d_{n,t}\mathbf{1}\{0 < d_{n,t} < \sigma^+_t\}, \\
+d^{(2),+}_{n,t} &= d_{n,t}\mathbf{1}\{\sigma^+_t \le d_{n,t} < 2\sigma^+_t\}, \\
+d^{(3),+}_{n,t} &= d_{n,t}\mathbf{1}\{d_{n,t} \ge 2\sigma^+_t\},
+\end{align*}
+and
+\begin{align*}
+d^{(1),-}_{n,t} &= d_{n,t}\mathbf{1}\{-\sigma^-_t < d_{n,t} < 0\}, \\
+d^{(2),-}_{n,t} &= d_{n,t}\mathbf{1}\{-2\sigma^-_t < d_{n,t} \le -\sigma^-_t\}, \\
+d^{(3),-}_{n,t} &= d_{n,t}\mathbf{1}\{d_{n,t} \le -2\sigma^-_t\}.
+\end{align*}
+\subsection*{Static specification}
+
+The static monthly Fama--MacBeth regression is
+\[
+r_{n,t} = \alpha_t
+        + \sum_{k=1}^3 M_k^+ d^{(k),+}_{n,t}
+        + \sum_{k=1}^3 M_k^- d^{(k),-}_{n,t}
+        + \Gamma X_{n,t} + \varepsilon_{n,t}.
+\]
+
+The regression is estimated separately for BMI, FIT, and OFI demand. Columns
+(1)--(3) use BMI, columns (4)--(6) use FIT, and columns (7)--(9) use OFI.
+Within each demand type, the three columns correspond to no controls,
+predictor controls, and predictor plus liquidity controls. BMI specifications
+also include the BMI-specific control set used in the main price-impact tables.
+
+\paragraph{Implementation detail.}
+The script computes $\sigma^+_t$ and $\sigma^-_t$ within demand type and month.
+This is the all-type R equivalent of the Stata construction
+\texttt{bysort yyyymm} after first filtering to one demand type. No
+type-month has missing positive- or negative-side standard deviations.
+
+If a monthly cross-section omits a coefficient because the corresponding bin
+has no observations, v4 keeps that monthly coefficient missing when computing
+Fama--MacBeth averages. It does not replace omitted coefficients with zero.
+The difference rows are Fama--MacBeth averages of monthly paired differences,
+not differences of the printed coefficient averages; these can diverge when
+the two coefficient rows use different nonmissing month sets.
+
+\paragraph{Takeaway.}
+The positive-demand domain continues to show strong concavity for FIT and OFI:
+the multiplier is largest for small positive shocks and smallest for large
+positive shocks. This is not consistent with a short-sales-constraint
+interpretation under which multipliers should rise with shock size. On the
+negative-demand side, OFI also shows strong concavity. FIT is flatter on the
+negative side, with the largest-bin multiplier below the smallest-bin
+multiplier but small and imprecise adjacent-bin differences. BMI remains noisy
+because it has only 21 monthly cross-sections. Overall, v4 does not show
+evidence that $M$ increases with shock size, so the results are not consistent
+with leverage constraints generating larger multipliers for larger shocks.
+
+\begin{table}[H]
+\centering
+\caption{v4 rebuilt shock-size bin summary statistics}
+\label{tab:v4_bin_summary}
+\begin{tabular}{llrrrr}
+\toprule
+Shock & Type & Bin & Obs & Mean $d_{n,t}$ & SD $d_{n,t}$ \\
+\midrule
+Negative & BMI & 1 & 3,671 & -0.001614 & 0.001317 \\
+Negative & BMI & 2 & 477 & -0.007543 & 0.002594 \\
+Negative & BMI & 3 & 533 & -0.016797 & 0.006574 \\
+Negative & FIT & 1 & 155,449 & -0.001062 & 0.001012 \\
+Negative & FIT & 2 & 49,096 & -0.004405 & 0.001770 \\
+Negative & FIT & 3 & 30,160 & -0.009209 & 0.004401 \\
+Negative & OFI & 1 & 235,014 & -0.012466 & 0.010089 \\
+Negative & OFI & 2 & 46,995 & -0.049190 & 0.016080 \\
+Negative & OFI & 3 & 24,862 & -0.121417 & 0.067350 \\
+\addlinespace
+Positive & BMI & 1 & 3,765 & 0.001889 & 0.001534 \\
+Positive & BMI & 2 & 670 & 0.008341 & 0.002291 \\
+Positive & BMI & 3 & 584 & 0.018393 & 0.006673 \\
+Positive & FIT & 1 & 223,728 & 0.001369 & 0.001470 \\
+Positive & FIT & 2 & 52,235 & 0.006385 & 0.002838 \\
+Positive & FIT & 3 & 31,910 & 0.014020 & 0.008255 \\
+Positive & OFI & 1 & 163,014 & 0.010444 & 0.009304 \\
+Positive & OFI & 2 & 37,776 & 0.038842 & 0.018288 \\
+Positive & OFI & 3 & 20,083 & 0.094069 & 0.056545 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{v4 rebuilt-bin pooled asymmetric multipliers by shock-size bin}
+\label{tab:v4_asym_multipliers}
+\begin{adjustbox}{max width=\textwidth}
+\begingroup
+\renewcommand{\vspace}[1]{}
+\input{reg_asym_stdev_posneg_rebuilt_v4.tex}
+\endgroup
+\end{adjustbox}
+\end{table}
+
+\paragraph{Controlled-specification highlights.}
+In the most controlled specification, positive FIT multipliers fall from 7.32
+in the smallest bin to 4.14 in the largest bin; positive OFI multipliers fall
+from 4.34 to 1.92. Negative OFI multipliers fall from 2.93 to 0.70, with a
+largest-minus-smallest difference of -2.22. Negative FIT falls from 3.60 to
+3.08 between the smallest and largest bins, but the differences are imprecise.
+BMI coefficients are not the main evidence because the sample has only 21
+months and the estimates are noisy.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.32\textwidth]{plots/v4/asym_v4_BMI.png}
+\includegraphics[width=0.32\textwidth]{plots/v4/asym_v4_FIT.png}
+\includegraphics[width=0.32\textwidth]{plots/v4/asym_v4_OFI.png}
+\caption{v4 static pairwise multiplier differences, most controlled specification}
+\label{fig:v4_static_tight_controls}
+\end{figure}
+
+\subsection*{Dynamic specification}
+
+The dynamic v4 specification applies the same pooled six-variable idea to the
+dynamic regression input. For each horizon $h$, sign and bin membership are
+based on the lagged cumulative demand shock, denoted $c^{(h)}_{n,t}$ in this
+note. The sign-specific standard deviations are computed within demand type,
+horizon, and month:
+\[
+\sigma^{+}_{t,h} = \operatorname{sd}(c^{(h)}_{n,t} \mid c^{(h)}_{n,t} > 0),
+\qquad
+\sigma^{-}_{t,h} = \operatorname{sd}(c^{(h)}_{n,t} \mid c^{(h)}_{n,t} < 0).
+\]
+Bin membership uses these lagged cumulative shocks, while the regressor value
+inside each bin remains the contemporaneous demand shock $d_{n,t}$, matching
+the existing non-asymmetric dynamic regression architecture:
+\[
+r_{n,t} = \alpha_t
+        + \sum_{k=1}^3 M_{h,k}^+ d_{n,t}\mathbf{1}\{c^{(h)}_{n,t}
+          \in B^{+,k}_{t,h}\}
+        + \sum_{k=1}^3 M_{h,k}^- d_{n,t}\mathbf{1}\{c^{(h)}_{n,t}
+          \in B^{-,k}_{t,h}\}
+        + \Gamma_h X_{n,t} + \varepsilon_{n,t}.
+\]
+The table below reports the 4-lag horizon for FIT and OFI. The dynamic v4
+balanced-month filter drops zero type-horizon-month cells, so the balanced and
+unbalanced dynamic v4 results are identical.
+
+\begin{table}[H]
+\centering
+\caption{v4 dynamic rebuilt 4-lag bin summary statistics}
+\label{tab:v4_dynamic_bin_summary_4lag}
+\begin{adjustbox}{max width=\textwidth}
+\input{summary_dynamic_asym_stdev_posneg_rebuilt_v4_4lag.tex}
+\end{adjustbox}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{v4 dynamic rebuilt-bin pooled asymmetric multipliers, 4-lag horizon}
+\label{tab:v4_dynamic_asym_multipliers_4lag}
+\begin{adjustbox}{max width=\textwidth}
+\begingroup
+\renewcommand{\vspace}[1]{}
+\input{reg_dynamic_asym_stdev_posneg_rebuilt_v4_4lag.tex}
+\endgroup
+\end{adjustbox}
+\end{table}
+
+\paragraph{Dynamic controlled-specification highlights.}
+In the most controlled 4-lag specification, positive FIT multipliers fall from
+3.97 in the smallest lagged-cumulative-shock bin to 2.29 in the largest bin,
+with a largest-minus-smallest difference of -1.68. Positive OFI multipliers
+fall from 1.63 to 0.57, with a largest-minus-smallest difference of -1.06.
+On the negative side, FIT falls from 3.97 to 1.54, and OFI falls from 1.95 to
+1.35. The dynamic rebuilt-bin evidence therefore has the same high-level
+shape as the static v4 evidence: multipliers do not rise with shock size.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.49\textwidth]{plots_dynamic/v4_unbalanced/dynamic_asym_v4_FIT_4lag.png}
+\includegraphics[width=0.49\textwidth]{plots_dynamic/v4_unbalanced/dynamic_asym_v4_OFI_4lag.png}
+\caption{v4 dynamic 4-lag pairwise multiplier differences, most controlled specification}
+\label{fig:v4_dynamic_tight_controls_4lag}
+\end{figure}
+
+\end{document}

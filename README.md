@@ -97,6 +97,12 @@ TODO for the final version
 - DONE `3_flow_cleaning.R`: Produces diagnostic figures for flow cleaning choices (bin behavior, trade-flow response, winsorization, and FIT before/after cleaning).
 - DONE `4_flow_PCA.R`: Plots how removing principal components from flows changes the FIT mapping relative to original FIT.
 
+## `g_asym`
+
+- Asymmetry analysis folder for positive- vs negative-demand shock-size bins.
+- Contains `PLAN_asym.md` and `RESULTS_asym.md`, active v1/v2/v3 scripts, generated LaTeX tables, RDS outputs, plots, and the v2 writeup note.
+- Scripts in this folder read upstream inputs from `20250117_quarterly/` and `code/R/tmp/...`, but write generated outputs back into `g_asym`.
+
   
 
 ## `utilities`

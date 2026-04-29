@@ -1,5 +1,4 @@
 # --- estimate static regressions using Fama-MacBeth
-# update:
 library(this.path)
 setwd(this.path::this.dir())
 source("../utilities/runmefirst.R")
