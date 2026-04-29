@@ -29,4 +29,5 @@ tmp/
 
 # Large data files - track small data, but not large raw files
 *.RDS
+*.dta
 *.csv
