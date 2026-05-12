@@ -13,7 +13,7 @@ If you use data or code based on our work, please cite the paper:
 }
 ~~~
 
-
+TODO: I think I did not use se_nw in regressions, I used se. REDO ALL
 
 ----
 
@@ -100,8 +100,9 @@ TODO for the final version
 ## `g_asym`
 
 - Asymmetry analysis folder for positive- vs negative-demand shock-size bins.
-- Contains `PLAN_asym.md` and `RESULTS_asym.md`, active v1/v2/v3 scripts, generated LaTeX tables, RDS outputs, plots, and the v2 writeup note.
-- Scripts in this folder read upstream inputs from `20250117_quarterly/` and `code/R/tmp/...`, but write generated outputs back into `g_asym`.
+- Contains `PLAN_asym.md` and `RESULTS_asym.md`, active v2/v3/v4 scripts (v1 archived under `archive/`), generated LaTeX tables, RDS outputs, plots, and v2/v3/v4 writeup notes.
+- Active scripts (v4) read upstream inputs from `code/R/tmp/...` and write generated outputs back into `g_asym/`. Prior v1 scripts sourced inputs from `20250117_quarterly/`.
+- v4 uses rebuilt sign-specific bins (SD computed within `type × yyyymm`) with six sign-bin regressors in one pooled monthly FM regression; drift tests guarding key v4 results live in `tests/drift_test_v4.R`.
 
   
 

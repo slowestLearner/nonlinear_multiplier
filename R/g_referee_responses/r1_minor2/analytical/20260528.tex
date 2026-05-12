@@ -1,0 +1,90 @@
+\documentclass[pdftex,12pt,a4paper]{article}
+
+% use user packages
+\usepackage[margin=1in]{geometry}  % set the margins to 1in on all sides
+\usepackage{graphicx}              % to include figures
+\usepackage{amsmath}               % great math stuff
+\usepackage{amsfonts}              % for blackboard bold, etc
+\usepackage{amsthm}                % better theorem environments
+\usepackage{xcolor}
+
+\usepackage{accents,hyperref}
+% use theorems
+\newtheorem{thm}{Theorem}[section]
+\newtheorem{lemma}[thm]{Lemma}
+\newtheorem{assu}[thm]{Assumption}
+\newtheorem{prop}[thm]{Proposition}
+\newtheorem{cor}[thm]{Corollary}
+\newtheorem{conj}[thm]{Conjecture}
+\newtheorem{rmk}[thm]{Remark}
+
+\newcommand{\ubar}[1]{\underaccent{\bar}{#1}}
+\newcommand{\dhat}[1]{\hat{\hat{#1}}}
+\newcommand\numberthis{\addtocounter{equation}{1}\tag{\theequation}}
+\usepackage{parskip}
+
+
+\begin{document}
+
+\title{Marginal multiplier}
+\author{}
+\date{\today}
+\maketitle
+
+\abstract \noindent 
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.5\baselineskip}
+
+\subsection{Ref's specification}
+
+If $M(d) = \alpha + \beta |d|$, then the cumulative price effect is 
+\begin{align*}
+P(d) & = d \cdot M(d) = \alpha d + \beta |d| \cdot d \\
+\Rightarrow P'(d) & = \alpha + 2 \beta |d| \numberthis \label{eq:marginal_P}
+\end{align*}
+
+\subsection{Inferring implied $P'(d)$ with standard errors}
+
+\paragraph{Marginal impact}
+We want to pin down marginal impact \eqref{eq:marginal_P} using our current specification. Using point estimates $M_1$ and $M_i$ at average bin demand levels $\bar{d}_1$ and $\bar{d}_i, i \in \{2,3\}$, 
+the slope $\beta$ is estimated as:
+\begin{equation}
+\hat{\beta}_i = \frac{M_i - M_1}{\bar{d}_i - \bar{d}_1}
+\end{equation}
+
+Substituting $M_i = \alpha + \beta \bar{d}_i$ and $\hat{\beta}_i$ into the marginal impact equation at $\bar{d}_i$:
+\begin{equation}
+P'(\bar{d}_i) = M_i + \bar{d}_i \left( \frac{M_i - M_1}{\bar{d}_i - \bar{d}_1} \right)
+\end{equation}
+
+Defining the scaling constant $k_i = \frac{\bar{d}_i}{\bar{d}_i - \bar{d}_1}$, we express the 
+marginal impact as a linear combination of the regression coefficients:
+\begin{equation}
+P'(\bar{d}_i) = (1 + k_i)M_i - k_i M_1
+\end{equation}
+
+\paragraph{Standard error via Delta method}
+To compute the standard error of the marginal impact, let $\hat{\theta} = [M_1, M_i]^T$ 
+with covariance matrix $\Sigma$:
+\begin{equation}
+\Sigma = \begin{bmatrix} \text{Var}(M_1) & \text{Cov}(M_1, M_i) \\ \text{Cov}(M_1, M_i) & \text{Var}(M_i) \end{bmatrix}
+\end{equation}
+
+The marginal impact $P'(\bar{d}_i)$ is a linear function $g(\hat{\theta})$. 
+The gradient vector $\nabla g$ is:
+\begin{equation}
+\nabla g = \begin{bmatrix} \frac{\partial P'}{\partial M_1} \\ \frac{\partial P'}{\partial M_i} \end{bmatrix} = \begin{bmatrix} -k_i \\ 1 + k_i \end{bmatrix}
+\end{equation}
+
+Applying the Delta Method, the variance of the marginal impact is:
+\begin{equation}
+\text{Var}(P'(\bar{d}_i)) = \nabla g^T \Sigma \nabla g
+\end{equation}
+%\begin{equation}
+%\text{Var}(P'(\bar{d}_i)) = k_i^2 \text{Var}(M_1) + (1 + k_i)^2 \text{Var}(M_i) - 2k_i(1 + k_i) \text{Cov}(M_1, M_i)
+%\end{equation}
+%
+%The standard error is then $SE(P'(\bar{d}_i)) = \sqrt{\text{Var}(P'(\bar{d}_i))}$.
+
+
+\end{document}

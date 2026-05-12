@@ -41,12 +41,10 @@ summary_data <- data_reg[, .(
     cumofi_lag <= -cumofi_sd_neg & cumofi_lag > -2 * cumofi_sd_neg, 2L,
     cumofi_lag <= -2 * cumofi_sd_neg, 3L,
     default = NA_integer_
-  )
-)]
-summary_data[, `:=`(
-  type = data_reg$type,
-  cumofi_lag = data_reg$cumofi_lag,
-  ofi = data_reg$ofi
+  ),
+  type       = type,
+  cumofi_lag = cumofi_lag,
+  ofi        = ofi
 )]
 
 summary_data <- summary_data[!is.na(shock) & !is.na(bin), .(

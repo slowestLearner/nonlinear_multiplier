@@ -85,3 +85,15 @@ data <- readRDS("~/Desktop/J-Leaves/data/stockprices/raw/characteristics/industr
 to_file <- "../../../../data/stocks/controls/ff12_industries_zero_mean.RDS"
 dir.create(dirname(to_file), recursive = T, showWarnings = F)
 saveRDS(data, to_file)
+
+# --- FF industry definitions
+from_dir_base <- "~/Desktop/J-Leaves/data/portfolios/industries"
+ind_nums <- c(5, 12, 17, 30, 49)
+for (ind_num in ind_nums) {
+    # ind_num <- ind_nums[1]
+    tic(ind_num)
+    from_file <- paste0(from_dir_base, "/", ind_num, "ind/industryDef.RDS")
+    data <- readRDS(from_file)
+    saveRDS(data, paste0(to_dir, ind_num, "ind.RDS"))
+    toc()
+}

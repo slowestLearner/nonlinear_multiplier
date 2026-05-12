@@ -58,15 +58,19 @@
 ## Workflow Status
 
 - [x] **Plan approved** — researcher signed off on data inventory + plan
-- [ ] **Execution complete** — Task 2 is active; Tasks 1 and 3 are archived
-- [ ] **Drift tests created** — drift tests passing on baseline
-- [ ] **Refactored** — integration reviewer `APPROVED`
+- [x] **Execution complete** — Tasks 1–13 implemented; Tasks 1 and 3 archived
+- [x] **Drift tests created** — `tests/drift_test_v4.R` passing (48/48); Phase A complete
+- [x] **Refactored** — integration reviewer `APPROVED`
 - [ ] **Docs finalized** — RESULTS.md matured, doc-reviewer `APPROVED`
 - [ ] **Merged** — branch merged to main or PR opened
 
 ---
 
 ## Decisions
+
+> **User decision (2026-05-07):** Protect all four key v4 results with drift tests: static OFI spec3 bin multipliers + diff 3-1; static FIT spec3 bin multipliers + diff 3-1; dynamic 4-lag OFI spec3 diff 3-1; dynamic 4-lag FIT spec3 diff 3-1.
+> **Question asked:** Which results should Phase A drift tests cover?
+> **Rationale:** None given; all four are the central v4 findings.
 
 > **User decision (2026-04-26):** Proceed with v3 (sign-specific σ) as a robustness check; defer main-paper vs appendix decision until after seeing results.
 > **Question asked:** The bin thresholds in v2 are pooled, so Panel A and B use the same σ — but within each panel the "typical shock size" differs. Should v3 use sign-specific σ? Tradeoff: cleaner within-panel economic question vs non-comparable bin thresholds across panels.
@@ -117,7 +121,7 @@ Walked 2026-04-26. No CLAUDE.md / AGENTS.md present. `code/README.md` documents 
 ### Task 1: Generate asymmetry table (v1 — differences only)
 **Depends on:** *(none)*
 **Review status:** IMPLEMENTED
-**Integration status:** *(set during integration)*
+**Integration status:** APPROVED
 
 **Script:** `archive/table_asym_stdev.py`
 **Input:** `fm_stdev_pos.RDS`, `fm_stdev_neg.RDS`
@@ -295,7 +299,7 @@ Validate: output file exists, two panels present, 3 rows × 2 rows-per-coef (coe
 ### Task 2: Re-run asymmetric FM with pooled σ and row-dropping (v2)
 **Depends on:** *(none — reads pooled RDS directly)*
 **Review status:** IMPLEMENTED
-**Integration status:** *(set during integration)*
+**Integration status:** APPROVED
 
 **Script:** `code/g_asym/2a_regression_fm_asym_v2.R`
 **Input:** `code/R/tmp/raw_data/reg_inputs/reg_table_static.RDS`
@@ -328,7 +332,7 @@ Validate: multipliers smaller than v1 originals; differences still negative (mul
 ### Task 3: Sign-specific σ bins (v3)
 **Depends on:** Task 2 complete
 **Review status:** APPROVED
-**Integration status:** *(set during integration)*
+**Integration status:** APPROVED
 
 **Script:** `code/g_asym/archive/2a_regression_fm_asym_v3.R` (copy of v2 with one change)
 **Input:** `code/R/tmp/raw_data/reg_inputs/reg_table_static.RDS`
@@ -368,7 +372,7 @@ Validated: (a) OFI negative panel shows declining multipliers; (b) sign-specific
 ### Task 5: Rebuilt sign-specific bins in one pooled regression (v4)
 **Depends on:** Task 4 complete
 **Review status:** IMPLEMENTED
-**Integration status:** *(set during integration)*
+**Integration status:** APPROVED
 
 **Script:** `code/g_asym/2a_regression_fm_asym_v4.R`
 **Input:** `code/R/tmp/raw_data/reg_inputs/reg_table_static.RDS`
@@ -400,7 +404,7 @@ The `type, yyyymm` grouping is the all-type equivalent of Stata's `bysort yyyymm
 ### Task 6: v3 pooled six-variable note
 **Depends on:** Task 4 complete
 **Review status:** IMPLEMENTED
-**Integration status:** *(set during integration)*
+**Integration status:** APPROVED
 
 **Script / inputs:** `code/g_asym/make_asym_stdev_v3_note_table.R`, `code/g_asym/fm_stdev_posneg_v3.RDS`
 **Outputs:** `code/g_asym/reg_asym_stdev_posneg_v3.tex`, `code/g_asym/reg_asym_stdev_posneg_v3_balanced.tex`, `code/g_asym/asym_stdev_v3_note.tex`, `code/g_asym/asym_stdev_v3_note.pdf`
@@ -415,7 +419,7 @@ The `type, yyyymm` grouping is the all-type equivalent of Stata's `bysort yyyymm
 ### Task 7: v4 rebuilt-bin pooled six-variable note
 **Depends on:** Task 5 complete
 **Review status:** IMPLEMENTED
-**Integration status:** *(set during integration)*
+**Integration status:** APPROVED
 
 **Script / inputs:** `code/g_asym/make_asym_stdev_v4_note_table.R`, `code/g_asym/make_asym_stdev_v4_dynamic_note_table.R`, `code/g_asym/make_asym_stdev_v4_dynamic_summary_table.R`, `code/g_asym/fm_stdev_posneg_rebuilt_v4.RDS`, `code/g_asym/fm_dynamic_stdev_posneg_rebuilt_v4_unbalanced.RDS`, `code/R/tmp/raw_data/reg_inputs/reg_table_dynamic.RDS`, v4 static/dynamic plot PNGs
 **Outputs:** `code/g_asym/reg_asym_stdev_posneg_rebuilt_v4.tex`, `code/g_asym/summary_dynamic_asym_stdev_posneg_rebuilt_v4_4lag.tex`, `code/g_asym/reg_dynamic_asym_stdev_posneg_rebuilt_v4_4lag.tex`, `code/g_asym/asym_stdev_v4_note.tex`, `code/g_asym/asym_stdev_v4_note.pdf`
@@ -431,7 +435,7 @@ The `type, yyyymm` grouping is the all-type equivalent of Stata's `bysort yyyymm
 ### Task 8: Balanced-month v3 pooled six-variable regression
 **Depends on:** Task 4 complete
 **Review status:** IMPLEMENTED
-**Integration status:** *(set during integration)*
+**Integration status:** APPROVED
 
 **Script / inputs:** `code/g_asym/2a_regression_fm_asym_v3_balanced.R`, `code/R/tmp/raw_data/reg_inputs/reg_table_static.RDS`
 **Outputs:** `code/g_asym/fm_stdev_posneg_v3_balanced.RDS`, `code/g_asym/fm_stdev_posneg_v3_balanced.dta`, `code/g_asym/fm_stdev_posneg_v3_balanced_dropped_type_months.RDS`, `code/g_asym/fm_stdev_posneg_v3_balanced_dropped_type_months.dta`
@@ -445,7 +449,7 @@ The `type, yyyymm` grouping is the all-type equivalent of Stata's `bysort yyyymm
 ### Task 9: Presentation plots for pooled asymmetry outputs
 **Depends on:** Tasks 4, 5, and 8 complete
 **Review status:** IMPLEMENTED
-**Integration status:** *(set during integration)*
+**Integration status:** APPROVED
 
 **Script / inputs:** `code/g_asym/pres_plots_static_asym_pooled.py`; RDS outputs from v3, v3 balanced, and v4.
 **Outputs:** PNGs under `code/g_asym/plots/v3/`, `code/g_asym/plots/v3_balanced/`, and `code/g_asym/plots/v4/`.
@@ -459,7 +463,7 @@ The `type, yyyymm` grouping is the all-type equivalent of Stata's `bysort yyyymm
 ### Task 10: Dynamic v3 pooled six-variable regression
 **Depends on:** Dynamic regression input exists
 **Review status:** IMPLEMENTED
-**Integration status:** *(set during integration)*
+**Integration status:** APPROVED
 
 **Script / inputs:** `code/g_asym/2a_regression_fm_asym_v3_dynamic.R`, `code/R/tmp/raw_data/reg_inputs/reg_table_dynamic.RDS`
 **Outputs:** `code/g_asym/fm_dynamic_stdev_posneg_v3_unbalanced.RDS`, `code/g_asym/fm_dynamic_stdev_posneg_v3_unbalanced.dta`, `code/g_asym/fm_dynamic_stdev_posneg_v3_balanced.RDS`, `code/g_asym/fm_dynamic_stdev_posneg_v3_balanced.dta`, `code/g_asym/fm_dynamic_stdev_posneg_v3_balanced_dropped_type_months.RDS`, `code/g_asym/fm_dynamic_stdev_posneg_v3_balanced_dropped_type_months.dta`
@@ -474,7 +478,7 @@ The `type, yyyymm` grouping is the all-type equivalent of Stata's `bysort yyyymm
 ### Task 11: Dynamic v4 rebuilt-bin pooled six-variable regression
 **Depends on:** Task 10 complete
 **Review status:** IMPLEMENTED
-**Integration status:** *(set during integration)*
+**Integration status:** APPROVED
 
 **Script / inputs:** `code/g_asym/2a_regression_fm_asym_v4_dynamic.R`, `code/R/tmp/raw_data/reg_inputs/reg_table_dynamic.RDS`
 **Outputs:** `code/g_asym/fm_dynamic_stdev_posneg_rebuilt_v4_unbalanced.RDS`, `code/g_asym/fm_dynamic_stdev_posneg_rebuilt_v4_unbalanced.dta`, `code/g_asym/fm_dynamic_stdev_posneg_rebuilt_v4_balanced.RDS`, `code/g_asym/fm_dynamic_stdev_posneg_rebuilt_v4_balanced.dta`, `code/g_asym/fm_dynamic_stdev_posneg_rebuilt_v4_balanced_dropped_type_months.RDS`, `code/g_asym/fm_dynamic_stdev_posneg_rebuilt_v4_balanced_dropped_type_months.dta`
@@ -488,7 +492,7 @@ The `type, yyyymm` grouping is the all-type equivalent of Stata's `bysort yyyymm
 ### Task 12: Presentation plots for dynamic pooled asymmetry outputs
 **Depends on:** Tasks 10 and 11 complete
 **Review status:** IMPLEMENTED
-**Integration status:** *(set during integration)*
+**Integration status:** APPROVED
 
 **Script / inputs:** `code/g_asym/pres_plots_dynamic_asym_pooled.py`; dynamic RDS outputs from v3, v3 balanced, v4, and v4 balanced.
 **Outputs:** PNGs under `code/g_asym/plots_dynamic/v3_unbalanced/`, `code/g_asym/plots_dynamic/v3_balanced/`, `code/g_asym/plots_dynamic/v4_unbalanced/`, and `code/g_asym/plots_dynamic/v4_balanced/`.
@@ -497,3 +501,36 @@ The `type, yyyymm` grouping is the all-type equivalent of Stata's `bysort yyyymm
 - [x] **Step 2: Generate plots with Python 3.11** — used `python3.11 pres_plots_dynamic_asym_pooled.py`.
 - [x] **Step 3: Validate outputs** — all 48 expected PNGs were written; `plots_dynamic/v4_unbalanced/dynamic_asym_v4_FIT_4lag.png` was visually spot-checked against the archived style.
 - [x] **Step 4: Document v4 balanced equivalence** — dynamic v4 balanced and unbalanced outputs use the same samples because the balanced filter drops 0 type-horizon-months.
+
+---
+
+### Task 13: v4 positive-vs-negative pairwise-delta tests
+**Depends on:** Tasks 5 and 11 complete
+**Review status:** IMPLEMENTED
+**Integration status:** APPROVED
+
+**Script / inputs:** `code/g_asym/test_v4_delta_posneg.R`, static and dynamic raw regression inputs.
+**Outputs:** `code/g_asym/v4_delta_posneg_tests_static.RDS`, `code/g_asym/v4_delta_posneg_tests_static.dta`, `code/g_asym/v4_delta_posneg_tests_static.csv`, `code/g_asym/v4_delta_posneg_tests_dynamic.RDS`, `code/g_asym/v4_delta_posneg_tests_dynamic.dta`, `code/g_asym/v4_delta_posneg_tests_dynamic.csv`, `code/g_asym/test_v4_delta_posneg_static_spec3.tex`, `code/g_asym/test_v4_delta_posneg_dynamic_spec3.tex`.
+
+- [x] **Step 1: Define paired monthly contrast** — for each pairwise comparison \(j-k\), computes \(\Delta_{j-k}(+) - \Delta_{j-k}(-)\) within each month from the monthly v4 bin coefficients.
+- [x] **Step 2: Run static tests** — rebuilt static v4 bins and ran tests for BMI, FIT, and OFI across spec_idx 1--3.
+- [x] **Step 3: Run dynamic tests** — rebuilt dynamic v4 bins and ran tests for FIT, OFI, and OFI_pre_whitened across horizons 1--4 and spec_idx 1--3.
+- [x] **Step 4: Validate month handling** — omitted monthly coefficients remain missing; a month enters a test only if all four coefficients needed for the positive-minus-negative delta contrast are available.
+- [x] **Step 5: Add note tables** — generated most-controlled static and dynamic LaTeX tables; the dynamic table excludes OFI_pre_whitened and was added to `asym_stdev_v4_note.tex`.
+
+---
+
+### Task 14: Code review of `asym_stdev_v4_note.pdf` pipeline
+**Depends on:** Task 13 complete
+**Review status:** APPROVED
+**Integration status:** APPROVED
+
+**Scope:** All scripts that generate outputs included in `asym_stdev_v4_note.tex`: `2a_regression_fm_asym_v4.R`, `2a_regression_fm_asym_v4_dynamic.R`, `test_v4_delta_posneg.R`, `make_asym_stdev_v4_note_table.R`, `make_asym_stdev_v4_dynamic_note_table.R`, `make_asym_stdev_v4_dynamic_summary_table.R`, `make_v4_delta_posneg_test_tables.R`, `pres_plots_static_asym_pooled.py`, `pres_plots_dynamic_asym_pooled.py`.
+**Outputs:** `code_review_v4_note.md` (full review record), fixes applied to two scripts, regenerated `.tex` files, recompiled PDF.
+
+- [x] **Step 1: Static code review** — reviewed all nine scripts for bin construction logic, boundary conditions, FM SE formula, difference-row month handling, star thresholds, and spec label consistency. Found two issues.
+- [x] **Step 2: Apply fixes** — (a) renamed mislabeled `"Shock"` column header to `"Type"` in both delta test table headers (`make_v4_delta_posneg_test_tables.R` lines 58, 74); (b) consolidated positional column assignment into a single `[, .()]` call in `make_asym_stdev_v4_dynamic_summary_table.R`.
+- [x] **Step 3: Regenerate outputs** — re-ran `make_v4_delta_posneg_test_tables.R` and `make_asym_stdev_v4_dynamic_summary_table.R`; recompiled `asym_stdev_v4_note.pdf` (8 pages, clean).
+- [x] **Step 4: Numerical verification** — loaded RDS outputs and confirmed all note-text highlights match the data to rounding; recomputed Table 1 bin summary statistics from raw data and confirmed exact match; read the reference dynamic script (`2_regression_dynamic_fm.R`) and confirmed v4 dynamic faithfully mirrors its architecture.
+- [x] **Step 5: Drift tests (Phase A)** — added `tests/drift_test_v4.R`. Guards 48 assertions (24 coef + 24 se) across the four protected result sets: static v4 OFI/FIT spec3 positive and negative sides; dynamic v4 OFI/FIT hor=4 spec3 positive and negative sides. Tolerance 1e-4 on all numeric values. All 48 tests pass; red-green cycle verified (perturbation of 0.01 triggers FAIL). Dependencies: `data.table` and `this.path` (both already used in the codebase). Run with `Rscript tests/drift_test_v4.R` from `g_asym/`.
+- [x] **Step 6: Integration refactor (Phase B)** — extracted shared `SIGN_BIN_VARS`, `DIFF_SPECS`, and `p.fama_macbeth_signbins` into `helpers.R`; removed duplicates from `2a_regression_fm_asym_v4.R`, `2a_regression_fm_asym_v4_dynamic.R`, and `test_v4_delta_posneg.R`. Corrected stale `g_asym` section in `code/README.md`. Drift tests: 48/48 passing.

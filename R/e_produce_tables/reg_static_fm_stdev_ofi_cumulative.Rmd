@@ -1,0 +1,225 @@
+---
+author: ""
+header-includes:
+   - \usepackage{rotating}
+   - \usepackage{float}
+   - \usepackage{natbib}
+   - \usepackage{booktabs}
+   - \usepackage{multirow}
+geometry: "left=1cm,right=1cm,top=0.9cm,bottom=1.2cm"
+output: 
+  pdf_document:
+    citation_package: natbib
+    keep_tex: false
+    number_sections: true
+link-citations: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r, echo = FALSE, results = 'asis', warning=FALSE, message=FALSE}
+rm(list = ls())
+library(data.table)
+library(dplyr)
+library(tidyr)
+library(scales)
+library(xtable)
+library(stringr) # For str_remove and strcat (if pracma is not used)
+library(reshape2) # For cast()
+library(this.path)
+setwd(this.path::this.dir())
+
+data <- readRDS("../tmp/price_impact/regression_contemp/fm_stdev.RDS")[type == "OFI"]
+data[, se := se_nw][, se_nw := NULL] # use NW standard errors
+
+# choose specification and variables
+data[, type_idx := ifelse(type == "BMI", 1, ifelse(type == "FIT", 2, 3))]
+data <- data[var %in% paste0("ofi_bin", 1:3)]
+
+# variable names
+data[, var_lab := var]
+data[, var_lab := gsub("ofi_bin1", "M_\\{\\|d_{n,t}| < \\\\sigma\\}", var_lab)]
+data[, var_lab := gsub("ofi_bin2", "M_\\{\\|d_{n,t}| \\\\in \\[\\\\sigma, 2\\\\sigma\\]\\}", var_lab)]
+data[, var_lab := gsub("ofi_bin3", "M_\\{\\|d_{n,t}| > 2 \\\\sigma\\}", var_lab)]
+data[, var_lab := paste0("$", var_lab, "$")]
+
+# choose regression specifications
+data <- data[spec_idx %in% 1:3]
+tmp <- unique(data[, .(spec_idx, type_idx)])[order(type_idx, spec_idx)]
+tmp[, reg_idx := 1:nrow(tmp)]
+data <- merge(data, tmp, by = c("type_idx", "spec_idx"))[, spec_idx := NULL]
+rm(tmp)
+
+# rank variables
+data[, var_idx := as.integer(sub("ofi_bin", "", var))]
+
+# also get shock sizes
+shock_data <- readRDS("../tmp/raw_data/reg_inputs/reg_table_static.RDS")[type == "OFI"]
+shock_data <- shock_data[, .(coef = mean(abs(ofi)), se = as.numeric(NA)), bin][order(bin)][, var_idx := 1:3]
+# shock_data[, var_lab := rep("", 3)]
+shock_data[, var_lab := c("$E(d | |d_{n,t}| < \\sigma))$", "$E(d | |d_{n,t}| \\in [\\sigma, 2\\sigma])$", "$E(d | |d_{n,t}| > 2 \\sigma)$")]
+
+# get implied cumulative price effects
+tmp <- copy(data[, .(reg_idx, var, var_lab, coef, se)])
+tmp[, bin := as.integer(sub("ofi_bin", "", var))]
+tmp <- merge(tmp, shock_data[, .(bin, shock_size = coef)], by = "bin")
+tmp[, coef := coef * shock_size]
+tmp[, se := se * shock_size]
+# tmp[bin == 1, var_lab := "$M_{|d_{n,t}| < \\sigma} \\cdot E(d ~|~ |d_{n,t}| < \\sigma)$"]
+# tmp[bin == 2, var_lab := "$M_{|d_{n,t}| \\in [\\sigma, 2\\sigma]} \\cdot E(d ~|~ |d_{n,t}| \\in [\\sigma, 2\\sigma])$"]
+# tmp[bin == 3, var_lab := "$M_{|d_{n,t}| > 2 \\sigma} \\cdot E(d ~|~ |d_{n,t}| > 2 \\sigma)$"]
+tmp[, var_lab := ""]
+tmp[, c("shock_size", "bin") := NULL]
+tmp[, var_idx := as.integer(gsub("ofi_bin", "", var))]
+cum_data <- copy(tmp)
+
+
+# add stars to coefficients
+cuts <- abs(qnorm(c(.01, .05, .1) / 2))
+data[, abs_tstat := abs(coef / se)]
+cum_data[, abs_tstat := abs(coef / se)]
+shock_data[, abs_tstat := abs(coef / se)]
+
+data[, ss := ifelse(abs_tstat > cuts[1], 3, ifelse(abs_tstat > cuts[2], 2, ifelse(abs_tstat > cuts[3], 1, 0)))]
+cum_data[, ss := ifelse(abs_tstat > cuts[1], 3, ifelse(abs_tstat > cuts[2], 2, ifelse(abs_tstat > cuts[3], 1, 0)))]
+shock_data[, ss := ifelse(abs_tstat > cuts[1], 3, ifelse(abs_tstat > cuts[2], 2, ifelse(abs_tstat > cuts[3], 1, 0)))]
+
+data[, coef_lab := paste0("$", sprintf("%.2f", coef))]
+cum_data[, coef_lab := paste0("$", sprintf("%.3f", coef))]
+shock_data[, coef_lab := paste0("$", sprintf("%.3f", coef))]
+
+data[, ss_lab := sapply(data[, ss], function(x) {
+  ifelse(x > 0,
+    # paste0("^{", strcat(rep("*", x)), "}$"),
+    paste0("^{", strrep("*", x), "}$"),
+    "$"
+  )
+})]
+cum_data[, ss_lab := sapply(cum_data[, ss], function(x) {
+  ifelse(x > 0,
+    # paste0("^{", strcat(rep("*", x)), "}$"),
+    paste0("^{", strrep("*", x), "}$"),
+    "$"
+  )
+})]
+
+data[, coef_lab := paste0(coef_lab, ss_lab)]
+cum_data[, coef_lab := paste0(coef_lab, ss_lab)]
+shock_data[, coef_lab := paste0(coef_lab, "$")]
+
+data[, se_lab := paste0("$(", sprintf("%.2f", round(se, 2)), ")$")]
+cum_data[, se_lab := paste0("$(", sprintf("%.3f", round(se, 2)), ")$")]
+shock_data[, se_lab := ""]
+
+# --- put together regression results
+
+
+# first group
+est <- dcast(data[, .(var_idx, reg_idx, coef_lab)], var_idx ~ reg_idx, value.var = "coef_lab") %>%
+  dplyr::mutate(group_id = 100 * row_number(), type = "coef")
+
+se <- dcast(data[, .(var_idx, reg_idx, se_lab)], var_idx ~ reg_idx, value.var = "se_lab") %>%
+  dplyr::mutate(group_id = 100 * row_number() + 1, type = "se")
+var_labels <- unique(data[, .(var_idx, var_lab)])
+
+tbl <- bind_rows(est, se) %>%
+  dplyr::inner_join(var_labels, by = "var_idx") %>%
+  dplyr::mutate(var_idx = var_lab) %>%
+  dplyr::mutate(var_lab = NULL) %>%
+  dplyr::rename(var_lab = var_idx) %>%
+  dplyr::arrange(group_id) %>%
+  dplyr::mutate(var_lab = ifelse(type == "se", "", var_lab)) %>%
+  dplyr::mutate(group_id = NULL, type = NULL)
+rm(est, se, var_labels)
+
+# second group
+shock_data[, reg_idx := 1]
+est <- dcast(shock_data[, .(var_idx, reg_idx, coef_lab)], var_idx ~ reg_idx, value.var = "coef_lab") %>%
+  dplyr::mutate(group_id = 100 * row_number() + 2, type = "coef")
+se <- dcast(shock_data[, .(var_idx, reg_idx, se_lab)], var_idx ~ reg_idx, value.var = "se_lab") %>%
+  dplyr::mutate(group_id = 100 * row_number() + 3, type = "se")
+var_labels <- unique(shock_data[, .(var_idx, var_lab)])
+tbl2 <- bind_rows(est, se) %>%
+  dplyr::inner_join(var_labels, by = "var_idx") %>%
+  dplyr::mutate(var_idx = var_lab) %>%
+  dplyr::mutate(var_lab = NULL) %>%
+  dplyr::rename(var_lab = var_idx) %>%
+  dplyr::arrange(group_id) %>%
+  dplyr::mutate(var_lab = ifelse(type == "se", "", var_lab)) %>%
+  dplyr::mutate(group_id = NULL, type = NULL) %>%
+  select(-var_lab)
+rm(est, se, var_labels)
+
+# third group
+est <- dcast(cum_data[, .(var_idx, reg_idx, coef_lab)], var_idx ~ reg_idx, value.var = "coef_lab") %>%
+  dplyr::mutate(group_id = 100 * row_number() + 2, type = "coef")
+se <- dcast(cum_data[, .(var_idx, reg_idx, se_lab)], var_idx ~ reg_idx, value.var = "se_lab") %>%
+  dplyr::mutate(group_id = 100 * row_number() + 3, type = "se")
+var_labels <- unique(cum_data[, .(var_idx, var_lab)])
+tbl3 <- bind_rows(est, se) %>%
+  dplyr::inner_join(var_labels, by = "var_idx") %>%
+  dplyr::mutate(var_idx = var_lab) %>%
+  dplyr::mutate(var_lab = NULL) %>%
+  dplyr::rename(var_lab = var_idx) %>%
+  dplyr::arrange(group_id) %>%
+  dplyr::mutate(var_lab = ifelse(type == "se", "", var_lab)) %>%
+  dplyr::mutate(group_id = NULL, type = NULL)
+rm(est, se, var_labels)
+
+tbl <- bind_cols(tbl, tbl2, tbl3)
+rm(tbl2, tbl3)
+
+# note controls
+ctrls <- data.table(var_lab = "Predictor controls", t(c("N", "Y", "Y", "", "", "", "", "")))
+ctrls <- rbind(ctrls, data.table(var_lab = "Liquidity controls", t(c("N", "N", "Y", "", "", "", "", ""))))
+names(ctrls) <- names(tbl)
+tbl <- bind_rows(tbl, ctrls)
+rm(ctrls)
+
+
+# add col columns
+col_names <- data.table(t(as.data.frame(c("", "(1)", "(2)", "(3)", "(4)", "", "(1b)", "(2b)", "(3b)"))))
+names(col_names) <- names(tbl)
+tbl <- bind_rows(col_names, tbl)
+rm(col_names)
+
+align_vector <- paste0("ll", paste0(rep("c", ncol(tbl) - 1), collapse = ""))
+x.side <- xtable(tbl, align = align_vector)
+
+this_add_to_row <- list(
+  pos = list(-1, nrow(tbl)),
+  command = c(
+    "\\toprule & \\multicolumn{3}{c}{Multiplier ($M_R$)} & $E(|d| | R)$ & \\multicolumn{4}{c}{Cumulative impact ($M_R \\cdot E(|d| | R)$)} \\\\\n \\cmidrule(l){2-4} \\cmidrule(l){5-5} \\cmidrule(l){6-9} \\vspace{5pt} \n",
+    "\\bottomrule"
+  )
+)
+
+print(x.side,
+  type = "latex",
+  table.placement = "!ht",
+  include.rownames = FALSE,
+  include.colnames = FALSE,
+  tabular.environment = "tabular",
+  caption.placement = NULL, # "top", NULL
+  hline.after = NULL, # We don't need hline; we use booktabs
+  floating = FALSE, # whether \begin{Table} should be created (TRUE) or not (FALSE)
+  sanitize.text.function = force, # Important to treat content of first column as latex function
+  add.to.row = this_add_to_row
+)
+
+to_dir <- "../output/tables/"
+dir.create(to_dir, showWarnings = F, recursive = T)
+print(x.side,
+  type = "latex",
+  table.placement = "!ht",
+  include.rownames = FALSE,
+  include.colnames = FALSE,
+  tabular.environment = "tabular",
+  caption.placement = NULL, # "top", NULL
+  hline.after = NULL, # We don't need hline; we use booktabs
+  floating = FALSE, # whether \begin{Table} should be created (TRUE) or not (FALSE)
+  sanitize.text.function = force, # Important to treat content of first column as latex function
+  add.to.row = this_add_to_row,
+  file = paste0(to_dir, "reg_static_fm_stdev_ofi_cumulative.tex")
+)
+```

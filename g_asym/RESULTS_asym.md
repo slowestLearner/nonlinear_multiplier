@@ -3,7 +3,7 @@
 > Mirrors PLAN.md structure. Updated after each step with key findings.
 > New agents: read PLAN.md for what to do, RESULTS.md for what was found.
 
-**Last updated:** 2026-04-28 (v4 static/dynamic PDF note refresh)
+**Last updated:** 2026-05-07 (code review and fixes)
 **Status:** In Progress
 
 ---
@@ -418,3 +418,125 @@ Investigated why negative panel results looked strange. Confirmed:
 - The script completed successfully and printed all 48 output paths.
 - `find plots_dynamic -name '*.png' | wc -l` returns 48.
 - Spot-checked `plots_dynamic/v4_unbalanced/dynamic_asym_v4_FIT_4lag.png`; it matches the archived plot format.
+
+---
+
+## Task 11: v4 Positive-vs-Negative Pairwise-Delta Tests
+
+**Status:** IMPLEMENTED and run
+
+### Specification
+- Script: `code/g_asym/test_v4_delta_posneg.R`.
+- Static input: `code/R/tmp/raw_data/reg_inputs/reg_table_static.RDS`.
+- Dynamic input: `code/R/tmp/raw_data/reg_inputs/reg_table_dynamic.RDS`.
+- For each pairwise bin comparison \(j-k\), the script computes the monthly series
+  \[
+  \left[M_j(+) - M_k(+)\right]_t - \left[M_j(-) - M_k(-)\right]_t.
+  \]
+- The reported coefficient is the Fama-MacBeth mean of that monthly series; the standard error is the time-series standard deviation divided by the square root of the number of included months.
+- Months are included only when all four underlying monthly bin coefficients are estimated. Omitted coefficients stay missing and are not zero-filled.
+
+### Outputs
+- `code/g_asym/test_v4_delta_posneg.R`
+- `code/g_asym/v4_delta_posneg_tests_static.RDS`
+- `code/g_asym/v4_delta_posneg_tests_static.dta`
+- `code/g_asym/v4_delta_posneg_tests_static.csv`
+- `code/g_asym/v4_delta_posneg_tests_dynamic.RDS`
+- `code/g_asym/v4_delta_posneg_tests_dynamic.dta`
+- `code/g_asym/v4_delta_posneg_tests_dynamic.csv`
+- `code/g_asym/test_v4_delta_posneg_static_spec3.tex`
+- `code/g_asym/test_v4_delta_posneg_dynamic_spec3.tex`
+- `code/g_asym/make_v4_delta_posneg_test_tables.R`
+
+### Static Most-Controlled Results (spec_idx = 3)
+- BMI: 2-1 = 1.02 (SE 1.89, t 0.54), 3-2 = 0.28 (SE 0.84, t 0.33), 3-1 = 1.29 (SE 2.12, t 0.61).
+- FIT: 2-1 = -0.94 (SE 1.52, t -0.62), 3-2 = -1.71 (SE 1.30, t -1.32), 3-1 = -2.65 (SE 1.73, t -1.54).
+- OFI: 2-1 = -0.21 (SE 0.14, t -1.48), 3-2 = 0.01 (SE 0.14, t 0.06), 3-1 = -0.20 (SE 0.18, t -1.11).
+
+### Dynamic Most-Controlled Results (spec_idx = 3)
+- Dynamic output includes FIT, OFI, and OFI_pre_whitened for horizons 1--4.
+- For 4-lag FIT: 2-1 = -0.09 (SE 0.62, t -0.15), 3-2 = 0.84 (SE 0.65, t 1.29), 3-1 = 0.75 (SE 0.63, t 1.19).
+- For 4-lag OFI: 2-1 = -0.39 (SE 0.12, t -3.29), 3-2 = -0.08 (SE 0.13, t -0.59), 3-1 = -0.46 (SE 0.13, t -3.63).
+- For 4-lag OFI_pre_whitened: 2-1 = -0.37 (SE 0.25, t -1.49), 3-2 = -0.25 (SE 0.26, t -0.99), 3-1 = -0.62 (SE 0.23, t -2.71).
+- The v4 note now includes most-controlled LaTeX tables for the static and dynamic positive-vs-negative pairwise-delta tests. The dynamic note table excludes OFI_pre_whitened.
+
+---
+
+## Task 12: Code Review of `asym_stdev_v4_note.pdf` Pipeline
+
+**Status:** APPROVED
+
+### Scope
+Full static code review of all nine scripts generating outputs in `asym_stdev_v4_note.tex`, followed by numerical verification of every result cited in the note text and the hardcoded Table 1 statistics.
+
+### Bugs Found and Fixed
+
+**Bug 1 — mislabeled column header in both delta test tables (`make_v4_delta_posneg_test_tables.R` lines 58, 74):** The first column of both the static and dynamic delta test tables was labeled `"Shock"` but contained demand types (`BMI`, `FIT`, `OFI`). Fixed to `"Type"`. Regenerated `test_v4_delta_posneg_static_spec3.tex` and `test_v4_delta_posneg_dynamic_spec3.tex`; recompiled PDF.
+
+**Bug 2 — fragile positional column assignment (`make_asym_stdev_v4_dynamic_summary_table.R` lines 46–50):** `type`, `cumofi_lag`, and `ofi` were assigned to `summary_data` by positional alignment from `data_reg` after constructing `shock` and `bin` in a separate `[, .()]` call. Consolidated into a single `[, .()]` call so all columns are computed in the same evaluation context. No numerical change to output.
+
+### Code Logic Verified (Static Review)
+- Bin boundaries match the LaTeX spec: boundary at ±σ belongs to bin 2, not bin 1 for both positive and negative sides.
+- Bins are mutually exclusive and cover all non-zero observations; zero-demand rows land in no bin (contribute only to the intercept).
+- Difference rows use an inner join on months (`all = FALSE`): a month enters a difference FM average only when both coefficients are estimated.
+- FM SE formula is consistent: `sd(series)/sqrt(T)` throughout all scripts.
+- Star thresholds: `abs(qnorm(c(.01,.05,.1)/2))` = `[2.576, 1.960, 1.645]`; confirmed match to PLAN convention.
+- `var_added == "controls_char+controls_liq"` filter selects `spec_idx = 3` in all plot scripts.
+- Dynamic bins use `cumofi_lag` for sign/bin membership and contemporaneous `ofi` as the regressor value inside each bin — matches the note's specification.
+- SD grouping in `make_asym_stdev_v4_dynamic_summary_table.R` (by `.(yyyymm, type, hor)`) is equivalent to the regression script's (by `.(yyyymm, type)` where `type` encodes horizon) — same cells.
+- Progressive interaction loop builds from the correct base formula (spec_idx = 3 with full char+liq controls).
+
+### Numerical Verification
+All static spec3 highlights cited in the note text match the RDS to rounding:
+- FIT pos: bin1 = 7.3154 (note: 7.32), bin3 = 4.1384 (note: 4.14).
+- OFI pos: bin1 = 4.3362 (note: 4.34), bin3 = 1.9152 (note: 1.92).
+- OFI neg: bin1 = 2.9280 (note: 2.93), bin3 = 0.7037 (note: 0.70), diff 3−1 = −2.2242 (note: −2.22).
+- FIT neg: bin1 = 3.6024 (note: 3.60), bin3 = 3.0797 (note: 3.08).
+
+All dynamic 4-lag spec3 highlights match:
+- FIT pos: bin1 = 3.9743, bin3 = 2.2932, diff 3−1 = −1.6810 (note: 3.97, 2.29, −1.68).
+- OFI pos: bin1 = 1.6328, bin3 = 0.5686, diff 3−1 = −1.0642 (note: 1.63, 0.57, −1.06).
+- FIT neg: bin1 = 3.9687, bin3 = 1.5403 (note: 3.97, 1.54).
+- OFI neg: bin1 = 1.9503, bin3 = 1.3463 (note: 1.95, 1.35).
+
+Table 1 hardcoded bin statistics: all 18 rows recomputed from raw `reg_table_static.RDS` and match the note exactly to 6 decimal places.
+
+### Reference Script Comparison
+Read `code/R/c_dynamic_results/2_regression_dynamic_fm.R`. The v4 dynamic script faithfully mirrors the reference: same melt/NA-drop, same `type = paste0(demand_type, "_", hor, "lag")`, same control formulas, same progressive interaction loop structure, same controls merge. Intentional differences are sign-specific SDs (vs pooled) and six sign-bin regressors (vs three pooled bins), both documented in the note.
+
+### Output
+- `code/g_asym/code_review_v4_note.md` — full review record with verification status table.
+- `code/g_asym/make_v4_delta_posneg_test_tables.R` — fixed (lines 58, 74).
+- `code/g_asym/make_asym_stdev_v4_dynamic_summary_table.R` — refactored (lines 46–50).
+- `code/g_asym/test_v4_delta_posneg_static_spec3.tex` — regenerated.
+- `code/g_asym/test_v4_delta_posneg_dynamic_spec3.tex` — regenerated.
+- `code/g_asym/summary_dynamic_asym_stdev_posneg_rebuilt_v4_4lag.tex` — regenerated (numerically identical).
+- `code/g_asym/asym_stdev_v4_note.pdf` — recompiled (8 pages, clean).
+
+---
+
+## Integration Review (Phase B)
+
+**Status:** APPROVED
+
+### Changes Made
+
+**`code/README.md` — stale `g_asym` section corrected:**
+- "v1/v2/v3 scripts" → "v2/v3/v4 scripts (v1 archived under `archive/`)".
+- "the v2 writeup note" → "v2/v3/v4 writeup notes".
+- Removed `20250117_quarterly/` as an active input path (only v1 used that path; v3/v4 scripts read from `code/R/tmp/...`).
+- Added description of v4 specification and drift test location.
+
+**`code/g_asym/helpers.R` — new shared helper (created during integration):**
+- `SIGN_BIN_VARS` constant was copy-pasted verbatim across `2a_regression_fm_asym_v4.R`, `2a_regression_fm_asym_v4_dynamic.R`, and `test_v4_delta_posneg.R`.
+- `DIFF_SPECS` was defined inconsistently: a local `diff_specs` list inside the FM function in the static script, and a module-level `DIFF_SPECS` constant in the dynamic script.
+- `p.fama_macbeth_signbins` was copy-pasted identically into both regression scripts with the above inconsistency as the only difference.
+- Extracted all three into `helpers.R`; all three scripts now source it.
+- `demand_type` and `hor` columns moved from inside `p.fama_macbeth_signbins` to `p.process_one_type` in the dynamic script (where they belong as caller metadata).
+
+**Drift tests:** 48/48 passing after refactor.
+
+### Advisory Items (no action taken)
+- Stata `.do` files (`stata_asymp_5_vars.do`, `stata_asymp_5_vars_rebin.do`, `stata_asymp_6_vars.do`, `stata_asymp_6_vars_rebin.do`) and their outputs (`fm_fit_ofi_posneg_summary_v3`, `fm_monthly_fit_ofi_posneg_v3`, `reg_table_dynamic.dta`) are present in `g_asym/` but not documented in this plan. They appear to be a Stata validation counterpart from the v3 analysis phase.
+- `2a_regression_fm.R` (in `b_static_results/`) has an unstaged modification adding `p.fama_macbeth_with_cov`; this is unrelated to the g_asym analysis and should be committed separately.
+- `3_regression_dynamic_and_static_fm_todel.R` has an unstaged deletion; also unrelated to g_asym.

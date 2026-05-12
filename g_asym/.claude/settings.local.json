@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Rscript *)",
+      "Bash(pdflatex -interaction=nonstopmode asym_stdev_v4_note.tex)"
+    ]
+  }
+}
