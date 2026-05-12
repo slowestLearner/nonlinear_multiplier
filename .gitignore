@@ -19,6 +19,8 @@
 renv/library/
 
 # Outputs and temporary files
+*.mp4
+*.pptx
 *.html
 *.pdf
 *.png
