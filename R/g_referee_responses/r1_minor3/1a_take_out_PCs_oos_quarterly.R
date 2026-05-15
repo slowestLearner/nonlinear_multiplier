@@ -1,15 +1,14 @@
-# --- for each quarter, use previous 1y data to estimate
+# --- for each quarter, use previous 1y data to estimate PCA and subtract residuals
 library(this.path)
 setwd(this.path::this.dir())
 source("../../utilities/runmefirst.R")
 library(RSpectra) # Faster for extracting top K components
 options(width = 200)
 
-# these are the stocks we use.
-stock_data <- readRDS("../../../../../data/stocks/prices/quarterly_return.RDS")[, .(yyyymm, permno, ret)]
-stock_data <- stock_data[yyyymm %in% 199303:202212]
+# the quarterly returns we use
+stock_data <- readRDS("../../../../../data/stocks/prices/quarterly_return.RDS")[yyyymm %in% 199303:202212, .(yyyymm, permno, ret)]
 
-# get daily returns
+# get daily returns from local computer
 tic()
 from_dir <- "../../../../../../../../Desktop/J-Leaves/data/stockprices/raw/daily/by_decade/"
 files <- list.files(from_dir)
@@ -32,11 +31,7 @@ stock_data <- merge(stock_data, unique(tmp[, .(yyyymm, idx)]), by = "yyyymm")
 data <- merge(data, tmp, by = "date")
 rm(tmp)
 
-# ---- stopped here
-
 # 1. Prepare a clean daily dataset for the worker
-# We still need the grid/imputation to handle the PCA requirements
-# (Note: Doing this globally or per-block is a memory vs. speed trade-off)
 message("Building grid and imputing...")
 grid <- stock_data[, .(idx, permno)]
 full_grid <- copy(grid)
@@ -57,19 +52,8 @@ data[is.na(ret), ret := mean_ret]
 data[, mean_ret := NULL]
 rm(grid)
 
-
-
-# grid <- stock_data[, .(yyyymm, idx, permno)]
-# ym_to_date <- unique(data[, .(yyyymm, date, idx)])
-# grid <- merge(grid, ym_to_date, by = c("yyyymm", "idx"), all = T, allow.cartesian = T)
-# data <- merge(grid, data, by = c("yyyymm", "date", "idx", "permno"), all.x = T)
-# data[, mean_ret := mean(ret, na.rm = T), .(date)] # Daily cross-sectional mean
-# data[is.na(ret), ret := mean_ret]
-# data[, mean_ret := NULL]
-# rm(grid)
-
 # 2. The Rolling Worker Function
-p.get_rolling_residuals <- function(curr_idx, k_list = c(1, 3, 5, 10, 15, 20)) {
+p.get_rolling_residuals <- function(curr_idx, k_list = c(1, 3, 5, 10, 15, 20, 30, 40, 50)) {
     # A. Get Training Data (Previous 4 quarters)
     # We use these to estimate the PCA LOADINGS
     train_data <- data[idx %in% (curr_idx - 4):(curr_idx - 1)]
@@ -122,18 +106,23 @@ p.get_rolling_residuals <- function(curr_idx, k_list = c(1, 3, 5, 10, 15, 20)) {
     return(results[!is.na(actual_q_ret)])
 }
 
-# 3. Execution
+# 3. Execution. Takes around a min
 tic()
 target_indices <- sort(unique(stock_data$idx))
 out <- rbindlist(mclapply(target_indices, p.get_rolling_residuals, mc.cores = detectCores() - 2))
 toc()
 
+# merge with returns
 stopifnot(nrow(out) == nrow(stock_data))
-
-# cor(out[, -c(1:2), with = F])
-# cov(out[, -c(1:2), with = F])
+out <- merge(stock_data[, .(yyyymm, permno, ret)], out, by = c("yyyymm", "permno"))
 
 # save
 to_file <- "tmp/pca_residuals/quarterly_oos.RDS"
 dir.create(dirname(to_file), showWarnings = FALSE, recursive = TRUE)
 saveRDS(out, to_file)
+
+# # --- SANITY: check
+# new <- readRDS("tmp/pca_residuals/quarterly_oos.RDS")
+# old <- readRDS("tmp/pca_residuals/archive/quarterly_oos.RDS")
+# tt <- merge(new, old, by = c("yyyymm", "permno"))
+# tt[, cor(res_pc20.x, res_pc20.y)]

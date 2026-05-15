@@ -1,0 +1,92 @@
+---
+author: ""
+header-includes:
+   - \usepackage{rotating}
+   - \usepackage{float}
+   - \usepackage{natbib}
+   - \usepackage{booktabs}
+   - \usepackage{multirow}
+geometry: "left=1cm,right=1cm,top=0.9cm,bottom=1.2cm"
+output: 
+  pdf_document:
+    citation_package: natbib
+    keep_tex: false
+    number_sections: true
+link-citations: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r, echo = FALSE, results = 'asis', warning=FALSE, message=FALSE}
+rm(list = ls())
+library(data.table)
+library(dplyr)
+library(scales)
+library(xtable)
+library(this.path)
+setwd(this.path::this.dir())
+
+# FIT and OFI
+data <- readRDS("../g_referee_responses/r5_major2/tmp/raw_files/ofi_dispersion_by_year_and_bin.RDS")[disp_type == "ofi_sd", .(yyyy, bin, disp_mean = disp_mean * 100, disp_median = disp_q50 * 100)]
+data <- dcast(data, yyyy ~ bin, value.var = c("disp_mean", "disp_median"))
+data[, disp_mean_4 := disp_mean_3 - disp_mean_1]
+data[, disp_median_4 := disp_median_3 - disp_median_1]
+
+# format
+data <- melt(data, id.vars = "yyyy", variable.name = "var", value.name = "disp") %>%
+  mutate(var = as.character(var)) %>%
+  mutate(disp = sprintf("%.2f", disp)) %>%
+  setDT()
+data <- dcast(data, yyyy ~ var, value.var = "disp")
+data[, yyyy := sprintf("%.0f", yyyy)]
+
+# add col columns
+col_names <- data.table(t(as.data.frame(c("", paste0("(", 1:(ncol(data) - 1), ")")))))
+names(col_names) <- names(data)
+data <- bind_rows(col_names, data)
+rm(col_names)
+
+# add variable names
+names(data) <- c("", rep(c("Bin 1", "Bin 2", "Bin 3", "Bin 3-1"), 2))
+
+align_vector <- paste0("ll", paste0(rep("c", times = ncol(data) - 1), collapse = ""))
+x.side <- xtable(data, align = align_vector)
+
+this_add_to_row <- list(
+  pos = list(-1, 0, nrow(data)),
+  command = c(
+    "\\toprule & \\multicolumn{4}{c}{Mean dispersion (\\%)} & \\multicolumn{4}{c}{Median dispersion (\\%)} \\\\\n \\cmidrule(l){2-5} \\cmidrule(l){6-9}\n",
+    "\\cmidrule(l){2-4} \\cmidrule(l){5-5} \\cmidrule(l){6-8} \\cmidrule(l){9-9}\n \\vspace{5pt}",
+    "\\bottomrule \n"
+  )
+)
+
+print(x.side,
+  type = "latex",
+  table.placement = "!ht",
+  include.rownames = FALSE,
+  include.colnames = TRUE,
+  tabular.environment = "tabular",
+  caption.placement = NULL, # "top", NULL
+  hline.after = NULL, # We don't need hline; we use booktabs
+  floating = FALSE, # whether \begin{Table} should be created (TRUE) or not (FALSE)
+  sanitize.text.function = force, # Important to treat content of first column as latex function
+  add.to.row = this_add_to_row
+)
+
+to_dir <- "../output/tables/"
+dir.create(to_dir, recursive = T, showWarnings = F)
+print(x.side,
+  type = "latex",
+  table.placement = "!ht",
+  include.rownames = FALSE,
+  include.colnames = TRUE,
+  tabular.environment = "tabular",
+  caption.placement = NULL, # "top", NULL
+  hline.after = NULL, # We don't need hline; we use booktabs
+  floating = FALSE, # whether \begin{Table} should be created (TRUE) or not (FALSE)
+  sanitize.text.function = force, # Important to treat content of first column as latex function
+  add.to.row = this_add_to_row,
+  file = paste0(to_dir, "summary_statistics_dispersion.tex")
+)
+```

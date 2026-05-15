@@ -1,4 +1,4 @@
-# --- BMI Monthly Rolling Inference
+# --- Take out PCs in monthly returns. This is for BMI which is for monthly
 library(this.path)
 setwd(this.path::this.dir())
 source("../../utilities/runmefirst.R")
@@ -8,7 +8,7 @@ options(width = 200)
 # 1. Prepare Stock Data (Monthly)
 stock_data <- readRDS("../../../../../data/stocks/prices/monthly_return.RDS")[, .(yyyymm, permno, ret)]
 
-# Filter for BMI months and merge BMI-specific returns
+# Filter for BMI months. Also append BMI-specific returns where applicable
 bmi_ref <- readRDS("../../tmp/raw_data/reg_inputs/reg_table_static.RDS")[type == "BMI"]
 tmp_months <- unique(bmi_ref[, .(yyyymm)])
 stock_data <- merge(stock_data, tmp_months, by = "yyyymm")
@@ -51,7 +51,7 @@ data[, mean_ret := NULL]
 setkey(data, idx, permno)
 
 # 4. The Monthly Rolling Worker
-p.get_monthly_rolling_residuals <- function(curr_idx, k_list = c(1, 3, 5, 10, 15, 20)) {
+p.get_monthly_rolling_residuals <- function(curr_idx, k_list = c(1, 3, 5, 10, 15, 20, 30, 40, 50)) {
     # A. Training Data: Last 12 Months
     train_data <- data[idx %in% (curr_idx - 12):(curr_idx - 1)]
     if (nrow(train_data) == 0) {
@@ -110,7 +110,18 @@ target_indices <- sort(unique(stock_data$idx))
 out <- rbindlist(mclapply(target_indices, p.get_monthly_rolling_residuals, mc.cores = detectCores() - 2))
 toc()
 
+# merge with returns
+stopifnot(nrow(out) == nrow(stock_data))
+out <- merge(stock_data[, .(yyyymm, permno, ret)], out, by = c("yyyymm", "permno"))
+
 # 6. Save
 to_file <- "tmp/pca_residuals/monthly_oos.RDS"
 dir.create(dirname(to_file), showWarnings = FALSE, recursive = TRUE)
 saveRDS(out, to_file)
+
+
+# # --- SANITY: check
+# new <- readRDS("tmp/pca_residuals/monthly_oos.RDS")
+# old <- readRDS("tmp/pca_residuals/archive/monthly_oos.RDS")
+# tt <- merge(new, old, by = c("yyyymm", "permno"))
+# tt[, cor(res_pc20.x, res_pc20.y)]

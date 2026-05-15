@@ -1,0 +1,76 @@
+---
+author: ""
+header-includes:
+   - \usepackage{rotating}
+   - \usepackage{float}
+   - \usepackage{natbib}
+   - \usepackage{booktabs}
+   - \usepackage{multirow}
+geometry: "left=1cm,right=1cm,top=0.9cm,bottom=1.2cm"
+output: 
+  pdf_document:
+    citation_package: natbib
+    keep_tex: false
+    number_sections: true
+link-citations: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r, echo = FALSE, results = 'asis', warning=FALSE, message=FALSE}
+library(this.path)
+setwd(this.path::this.dir())
+rm(list = ls())
+library(data.table)
+library(dplyr)
+library(scales)
+library(xtable)
+
+# raw data
+data <- fread("../g_referee_responses/r1_minor3/tmp/raw_files/control_classification/char.csv")[, `Control type` := NULL]
+data[data == 1] <- "Y"
+data[is.na(data)] <- ""
+names(data)[1] <- "Variable"
+
+align_vector <- paste0("ll", paste0(rep("c", times = ncol(data) - 1), collapse = ""))
+x.side <- xtable(data, align = align_vector)
+
+this_add_to_row <- list(
+  pos = list(-1, 0, 13, nrow(data)),
+  command = c(
+    "\\toprule & & \\multicolumn{3}{c}{Relationship with price} \\\\\n   \\cmidrule(l){3-5}\n",
+    "\\midrule \\multicolumn{5}{c}{Panel A: return predictors} \\\\\n \\midrule \\\\\n",
+    "\\midrule \\multicolumn{5}{c}{Panel B: liquidity proxies} \\\\\n   \\midrule\n",
+    "\\bottomrule \n"
+  )
+)
+
+print(x.side,
+  type = "latex",
+  table.placement = "!ht",
+  include.rownames = FALSE,
+  include.colnames = TRUE,
+  tabular.environment = "tabular",
+  caption.placement = NULL, # "top", NULL
+  hline.after = NULL, # We don't need hline; we use booktabs
+  floating = FALSE, # whether \begin{Table} should be created (TRUE) or not (FALSE)
+  sanitize.text.function = force, # Important to treat content of first column as latex function
+  add.to.row = this_add_to_row
+)
+
+to_dir <- "../output/tables/"
+dir.create(to_dir, recursive = T, showWarnings = F)
+print(x.side,
+  type = "latex",
+  table.placement = "!ht",
+  include.rownames = FALSE,
+  include.colnames = TRUE,
+  tabular.environment = "tabular",
+  caption.placement = NULL, # "top", NULL
+  hline.after = NULL, # We don't need hline; we use booktabs
+  floating = FALSE, # whether \begin{Table} should be created (TRUE) or not (FALSE)
+  sanitize.text.function = force, # Important to treat content of first column as latex function
+  add.to.row = this_add_to_row,
+  file = paste0(to_dir, "price_related_controls.tex")
+)
+```

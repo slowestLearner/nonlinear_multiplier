@@ -10,7 +10,7 @@ data <- data[var %in% paste0("ofi_bin", 1:3)]
 data <- data[, .(bin = as.integer(sub("ofi_bin", "", var)), type, M = coef, se)]
 
 # get distance in |d|
-tmp <- readRDS("../../../../formal_tests/code/R/tmp/raw_data/reg_inputs/reg_table_static.RDS")[type != "OFI_pre_whitened"]
+tmp <- readRDS("../../tmp/raw_data/reg_inputs/reg_table_static.RDS")[type != "OFI_pre_whitened"]
 tmp <- tmp[, .(d = mean(abs(ofi))), .(type, bin)]
 data <- merge(data, tmp, by = c("type", "bin"))[order(type, bin)]
 rm(tmp)

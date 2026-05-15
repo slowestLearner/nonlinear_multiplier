@@ -1,5 +1,4 @@
 # --- So it seems we still have to output the rethat. And later assess...
-# TODO: focus on the ones where we actually run regressions
 library(this.path)
 setwd(this.path::this.dir())
 source("../../utilities/runmefirst.R")

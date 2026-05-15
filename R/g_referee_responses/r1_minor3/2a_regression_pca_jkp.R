@@ -1,19 +1,21 @@
-# --- Let's see what happens with using PCA residuals
+# --- Use PCA residuals to do regressions. Also control for JKP characteristics
+# this is a time-consuming script to run
 library(this.path)
 setwd(this.path::this.dir())
 source("../../utilities/runmefirst.R")
 source("../../utilities/regressions.R")
-options(width = 120)
+options(width = 200)
 library(patchwork)
 
 # regression data. Can also use BMI
 tic("preparing data")
-data_all <- readRDS("../../tmp/raw_data/reg_inputs/reg_table_static.RDS")[type != "OFI_pre_whitened"]
+data_all <- readRDS("../../tmp/raw_data/reg_inputs/reg_table_static.RDS")[type %in% c("FIT", "OFI", "BMI")]
 
-# get alternative returns
+# get alternative, PCA-residualized returns
 data_all[, freq := ifelse(type == "BMI", "monthly", "quarterly")]
 tmp <- readRDS("tmp/pca_residuals/quarterly_oos.RDS")[, freq := "quarterly"]
 tmp <- rbind(tmp, readRDS("tmp/pca_residuals/monthly_oos.RDS")[, freq := "monthly"])
+tmp[, ret := NULL]
 data_all <- merge(data_all, tmp, by = c("yyyymm", "permno", "freq"), all.x = T)
 setnames(data_all, "ret", "res_pc0")
 rm(tmp)
@@ -31,8 +33,7 @@ controls_bmi <- setdiff(names(tmp), c("yyyymm", "permno"))
 rm(tmp)
 toc()
 
-
-# jkp chars
+# merge with jkp chars
 from_dir <- "../../tmp/raw_data/jkp_chars_not_lagged/1_unif/"
 files <- list.files(from_dir, pattern = "*.RDS")
 jkp_vars <- data.table()
@@ -70,13 +71,13 @@ gc()
 # ###########################################################
 
 
-# create control formulas
-controls <- paste0(c(controls_char, controls_liq), collapse = "+")
-
 # worker function to estimate regression with one type of demand variable. reg_spec = "nonlinear" or "stdev"
 # data <- data_all[type == this_type]
 p.process_one_type <- function(data) {
   this_type <- data[1, type] # parse
+
+  # baseline controls
+  controls <- paste0(c(controls_char, controls_liq), collapse = "+")
 
   out_all <- data.table() # save results here
 
@@ -97,7 +98,7 @@ p.process_one_type <- function(data) {
     out_all <- rbind(out_all, out)
   }
 
-  # now let's add jkp chars progressively
+  # add jkp chars progressively
   for (i in 1:10) {
     # i <- 1
     tic(i)
@@ -114,29 +115,39 @@ p.process_one_type <- function(data) {
   }
   out_all[, type := this_type]
 
-  out_all[var == "ofi_bin1"]
-
   return(out_all)
 }
 
-types <- unique(data_all[, type])
-out_all <- data.table()
-for (this_type in types) {
-  tic(this_type)
-  # this_type <- types[1]
-  out <- p.process_one_type(data_all[type == this_type])
-  out_all <- rbind(out_all, out)
-  gc()
-  toc()
-}
+data_list <- split(data_all, by = "type")
+rm(data_all)
+out <- rbindlist(mclapply(data_list, p.process_one_type, mc.cores = 3))
+
+# later can try to see if I can speed up the code
+# types <- unique(data_all[, type])
+# out_all <- data.table()
+
+# for (this_type in types) {
+#   tic(this_type)
+#   # this_type <- types[1]
+#   out <- p.process_one_type(data_all[type == this_type])
+#   out_all <- rbind(out_all, out)
+#   gc()
+#   toc()
+# }
 
 to_file <- "tmp/reg_results/reg_results_fm_pca_oos_jkp.RDS"
 dir.create(dirname(to_file), recursive = T, showWarnings = F)
-saveRDS(out_all, to_file)
+saveRDS(out, to_file)
+
+# # --- SANITY: check with earlier reg results
+# new <- readRDS("tmp/reg_results/reg_results_fm_pca_oos_jkp.RDS")[y_var == "res_pc0" & jkp_vars == 0]
+# old <- readRDS("../../tmp/price_impact/regression_contemp/fm_stdev.RDS")[spec_idx == 3 & grepl("ofi_bin", var) & type %in% c("BMI", "FIT", "OFI")]
+# out <- merge(new, old, by = c("var", "type"))
+# feols(coef.x ~ coef.y, data = out)
+# feols(se.x ~ se.y, data = out)
 
 
-
-# # === SANITY check. plot
+# # === plot results
 
 out_all <- readRDS("tmp/reg_results/reg_results_fm_pca_oos_jkp.RDS")
 out_all[, num_pcs := as.integer(gsub("res_pc", "", y_var))]
@@ -152,7 +163,7 @@ rm(tmp)
 this_type <- "FIT"
 this_type <- "OFI"
 this_type <- "BMI"
-spec_cut_bmi <- 11
+spec_cut_bmi <- 20
 
 out <- copy(out_all[var_type == "coef" & type == this_type]) %>% setorder(var, spec_idx)
 if (this_type == "BMI") {
@@ -193,16 +204,3 @@ p2 <- ggplot(
 
 # plot
 p1 / p2
-
-# # --- SANITY: check with earlier reg results
-
-# out_all <- readRDS("tmp/reg_results/reg_results_fm.RDS")
-# out_all[, var_type := ifelse(var %in% paste0("ofi_bin", 1:3), "coef", "diff")]
-# out_all <- out_all[spec_idx %in% 1:3]
-
-# tmp <- readRDS('../../tmp/price_impact/regression_contemp/fm_stdev.RDS')
-# tmp <- tmp[spec_idx %in% 1:3, .(spec_idx, var, coef, se, type)]
-# out <- merge(out_all, tmp, by = c("spec_idx", "var", "type"))
-
-# out[, cor(coef.x, coef.y, use = "complete.obs"), type]
-# out[, cor(se.x, se.y, use = "complete.obs"), type]

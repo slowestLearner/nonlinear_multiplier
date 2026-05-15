@@ -14,66 +14,85 @@
 # returns: a data frame containing the coefficients and standard errors
 #
 p.fama_macbeth <- function(data, ff, compare_coefs = FALSE) {
-    # regression for one period
-    p.get_one_period <- function(this_ym) {
-        ols <- lm(ff, data[yyyymm == this_ym])
-        # Get the dependent variable name dynamically
-        dep_var_name <- all.vars(as.formula(ff))[1]
-        return(data.table(
-            yyyymm = this_ym, var = names(coef(ols)), coef = ols$coef,
-            r2 = var(ols$fitted.values) / var(ols$model[[dep_var_name]])
-        ))
-    }
-
-    # regression by period
-    out <- rbindlist(lapply(unique(data[, yyyymm]), p.get_one_period))
-
-    # extract R2
-    r2_data <- unique(out[, .(yyyymm, r2)])[, .(r2 = mean(r2))]
-    out[, r2 := NULL]
-
-    # let's do Newey-West
-    yms <- sort(unique(out[, yyyymm]))
-
-    # compare coefficient differences
-    if (compare_coefs) {
-        out <- rbind(out, data.table(
-            yyyymm = yms, var = "ofi_bin2 - ofi_bin1",
-            coef = out[var == "ofi_bin2", coef] - out[var == "ofi_bin1", coef]
-        ))
-        out <- rbind(out, data.table(
-            yyyymm = yms, var = "ofi_bin3 - ofi_bin1",
-            coef = out[var == "ofi_bin3", coef] - out[var == "ofi_bin1", coef]
-        ))
-        out <- rbind(out, data.table(
-            yyyymm = yms, var = "ofi_bin3 - ofi_bin2",
-            coef = out[var == "ofi_bin3", coef] - out[var == "ofi_bin2", coef]
-        ))
-    }
-
-    # newey-west lag
-    if ("hor" %in% names(data)) {
-        this_hor <- data[1, hor]
-    } else {
-        this_hor <- 1
-    }
-
-    coef_data <- data.table()
-    for (this_var in unique(out[, var])) {
-        mm <- lm(coef ~ 1, out[var == this_var])
-        coef_data <- rbind(coef_data, data.table(
-            var = this_var, coef = mm$coef[1],
-            se = sqrt(vcov(mm)[1, 1]),
-            se_nw = sqrt(NeweyWest(mm, this_hor)[1, 1])
-        ))
-    }
-    coef_data[, r2 := r2_data[, r2]]
-    coef_data[, obs := nrow(data)]
-    coef_data[, type := data[1, type]]
-    coef_data[, nw_lag := this_hor]
-    return(coef_data)
+  # regression for one period
+  p.get_one_period <- function(this_ym) {
+    ols <- lm(ff, data[yyyymm == this_ym])
+    # Get the dependent variable name dynamically
+    dep_var_name <- all.vars(as.formula(ff))[1]
+    return(data.table(
+      yyyymm = this_ym, var = names(coef(ols)), coef = ols$coef,
+      r2 = var(ols$fitted.values) / var(ols$model[[dep_var_name]])
+    ))
+  }
+  
+  # regression by period
+  out <- rbindlist(lapply(unique(data[, yyyymm]), p.get_one_period))
+  
+  # extract R2
+  r2_data <- unique(out[, .(yyyymm, r2)])[, .(r2 = mean(r2))]
+  out[, r2 := NULL]
+  
+  # let's do Newey-West
+  yms <- sort(unique(out[, yyyymm]))
+  
+  if (compare_coefs) {
+    # 1. Identify all variables containing 'ofi_'
+    all_vars <- unique(out$var)
+    target_vars <- sort(grep("ofi_", all_vars, value = TRUE))
+    
+    # 2. Generate all permutations (v_j, v_i)
+    # expand.grid creates every possible combination of the two vectors
+    pairs_grid <- expand.grid(var_j = target_vars, var_i = target_vars, stringsAsFactors = FALSE)
+    
+    # 3. Filter out self-comparisons (where var_j == var_i)
+    pairs_grid <- pairs_grid[pairs_grid$var_j != pairs_grid$var_i, ]
+    
+    # 4. Use lapply to iterate through the rows of the grid
+    diff_list <- lapply(1:nrow(pairs_grid), function(idx) {
+      var_j <- pairs_grid$var_j[idx]
+      var_i <- pairs_grid$var_i[idx]
+      
+      # Extract coefficients for each variable
+      dt_j <- out[var == var_j, .(yyyymm, coef_j = coef)]
+      dt_i <- out[var == var_i, .(yyyymm, coef_i = coef)]
+      
+      # Merge by yyyymm to ensure temporal alignment
+      res <- merge(dt_j, dt_i, by = "yyyymm")
+      
+      # Calculate the directional difference: v_j - v_i
+      res[, coef := coef_j - coef_i]
+      res[, var := paste0(var_j, " - ", var_i)]
+      
+      return(res[, .(yyyymm, var, coef)])
+    })
+    
+    # Optional: combine into a single data.table
+    out_diffs <- rbindlist(diff_list)
+    out <- rbind(out, out_diffs)
+  }
+  
+  # newey-west lag
+  if ("hor" %in% names(data)) {
+    this_hor <- data[1, hor]
+  } else {
+    this_hor <- 1
+  }
+  
+  coef_data <- data.table()
+  for (this_var in unique(out[, var])) {
+    mm <- lm(coef ~ 1, out[var == this_var])
+    coef_data <- rbind(coef_data, data.table(
+      var = this_var, coef = mm$coef[1],
+      se = sqrt(vcov(mm)[1, 1]),
+      se_nw = sqrt(NeweyWest(mm, this_hor)[1, 1])
+    ))
+  }
+  coef_data[, r2 := r2_data[, r2]]
+  coef_data[, obs := nrow(data)]
+  coef_data[, type := data[1, type]]
+  coef_data[, nw_lag := this_hor]
+  return(coef_data)
 }
-
 
 # utility function: panel regression
 p.panel_regression <- function(data, ff, compare_coefs = FALSE) {

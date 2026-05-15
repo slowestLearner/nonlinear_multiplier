@@ -47,22 +47,6 @@ p.fama_macbeth_with_cov <- function(data, ff, compare_coefs = FALSE, output_cov 
   # let's do Newey-West
   yms <- sort(unique(out[, yyyymm]))
 
-  # # compare coefficient differences
-  # if (compare_coefs) {
-  #   out <- rbind(out, data.table(
-  #     yyyymm = yms, var = "ofi_bin2 - ofi_bin1",
-  #     coef = out[var == "ofi_bin2", coef] - out[var == "ofi_bin1", coef]
-  #   ))
-  #   out <- rbind(out, data.table(
-  #     yyyymm = yms, var = "ofi_bin3 - ofi_bin1",
-  #     coef = out[var == "ofi_bin3", coef] - out[var == "ofi_bin1", coef]
-  #   ))
-  #   out <- rbind(out, data.table(
-  #     yyyymm = yms, var = "ofi_bin3 - ofi_bin2",
-  #     coef = out[var == "ofi_bin3", coef] - out[var == "ofi_bin2", coef]
-  #   ))
-  # }
-
   if (compare_coefs) {
     # 1. Identify all 'ofi_bin' variables and extract their numeric suffixes
     all_vars <- unique(out$var)
@@ -117,10 +101,10 @@ p.fama_macbeth_with_cov <- function(data, ff, compare_coefs = FALSE, output_cov 
 
   # let's also get covariance matrix
   if (output_cov) {
-    tt <- dcast(out,
+    tt <- data.table(dcast(out,
       yyyymm ~ var,
       value.var = "coef"
-    )[, yyyymm := NULL]
+    ))[, yyyymm := NULL]
     vv <- names(tt)
     mat <- as.matrix(tt)
     fit <- lm(mat ~ 1)
@@ -140,16 +124,16 @@ p.fama_macbeth_with_cov <- function(data, ff, compare_coefs = FALSE, output_cov 
 
 
 # worker function to estimate regression with one type of demand variable. reg_spec = "nonlinear" or "stdev"
-# TODO: take out nonlinear
 # data <- data_list[[1]]
 p.process_one_type <- function(data) {
   this_type <- data[1, type] # parse
 
   # control variables for different regression specifications
   control_formulas <- c(
-    "1",
-    paste0(c(controls_char), collapse = "+"),
+    # "1",
+    # paste0(c(controls_char), collapse = "+"),
     paste0(c(controls_char, controls_liq), collapse = "+"),
+    paste0(c(paste0(controls_char, " * as.factor(bin)"), controls_liq), collapse = "+"),
     paste0(paste0(c(controls_char, controls_liq), " * as.factor(bin)"), collapse = "+")
   )
 
@@ -242,36 +226,36 @@ dir.create(to_dir, recursive = T, showWarnings = F)
 saveRDS(out_coef, paste0(to_dir, "fm_coefs.RDS"))
 saveRDS(out_cov, paste0(to_dir, "fm_cov.RDS"))
 
-# ----- just check results
-options(width = 150)
+# # ----- just check results
+# options(width = 150)
 
-out <- readRDS("tmp/anna/reg_with_flexible_binning/fm_coefs.RDS")[grepl("ofi_bin", var) & spec_idx %in% c(3, 4)]
-out[, var_type := ifelse(var %in% paste0("ofi_bin", 1:3), "coef", "diff")]
-out[, coef_round := round(coef, 2)]
-out[, se_round := round(se, 2)]
-out[, tstat_round := round(coef / se, 2)]
+# out <- readRDS("tmp/anna/reg_with_flexible_binning/fm_coefs.RDS")[grepl("ofi_bin", var)]
+# out[, var_type := ifelse(var %in% paste0("ofi_bin", 1:3), "coef", "diff")]
+# out[, coef_round := round(coef, 2)]
+# out[, se_round := round(se, 2)]
+# out[, tstat_round := round(coef / se, 2)]
 
-# rank coefs
-tmp <- unique(out[, .(var)]) %>% mutate(var_lab = paste0(row_number(), "_", var))
-out <- merge(out, tmp, by = "var")
-rm(tmp)
+# # rank coefs
+# tmp <- unique(out[, .(var)]) %>% mutate(var_lab = paste0(row_number(), "_", var))
+# out <- merge(out, tmp, by = "var")
+# rm(tmp)
 
-dcast(out, var_lab ~ type + spec_idx, value.var = "coef_round")
-dcast(out, var_lab ~ type + spec_idx, value.var = "se_round")
-dcast(out, var_lab ~ type + spec_idx, value.var = "tstat_round")
+# dcast(out, var_lab ~ type + spec_idx, value.var = "coef_round")
+# dcast(out, var_lab ~ type + spec_idx, value.var = "se_round")
+# dcast(out, var_lab ~ type + spec_idx, value.var = "tstat_round")
 
+# this_type <- "coef"
+# this_type <- "diff"
 
-this_type <- "coef"
-this_type <- "diff"
-
-dcast(out[var_type == this_type], var ~ type + spec_idx, value.var = "coef_round")
-dcast(out[var_type == this_type], var ~ type + spec_idx, value.var = "se_round")
-dcast(out[var_type == this_type], var ~ type + spec_idx, value.var = "tstat_round")
+# dcast(out[var_type == this_type], var ~ type + spec_idx, value.var = "coef_round")
+# dcast(out[var_type == this_type], var ~ type + spec_idx, value.var = "se_round")
+# dcast(out[var_type == this_type], var ~ type + spec_idx, value.var = "tstat_round")
 
 # # === SANITY check from earlier
 
-# old <- readRDS("../../tmp/price_impact/regression_contemp/fm_stdev.RDS")[spec_idx %in% 1:3 & grepl("ofi_bin", var) & type != 'OFI_pre_whitened'][, c('var_type','var_added') := NULL]
-# new <- readRDS("tmp/anna/reg_with_flexible_binning/fm_coefs.RDS")[spec_idx %in% 1:3 & grepl("ofi_bin", var)]
+# old <- readRDS("../../tmp/price_impact/regression_contemp/fm_stdev.RDS")[spec_idx %in% 3 & grepl("ofi_bin", var) & type != "OFI_pre_whitened"][, c("var_type", "var_added") := NULL]
+# new <- readRDS("tmp/anna/reg_with_flexible_binning/fm_coefs.RDS")[spec_idx %in% 1 & grepl("ofi_bin", var)]
+# new[, spec_idx := 3]
 # dim(new) == dim(old)
 
 # out <- merge(new[, .(spec_idx, var, type, coef, se, se_nw)], old[, .(spec_idx, var, type, coef, se, se_nw)], by = c("spec_idx", "var", "type"))

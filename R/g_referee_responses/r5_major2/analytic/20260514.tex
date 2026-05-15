@@ -1,0 +1,98 @@
+\documentclass[pdftex,12pt,a4paper]{article}
+
+% use user packages
+\usepackage[margin=1in]{geometry}  % set the margins to 1in on all sides
+\usepackage{graphicx}              % to include figures
+\usepackage{amsmath}               % great math stuff
+\usepackage{amsfonts}              % for blackboard bold, etc
+\usepackage{amsthm}                % better theorem environments
+\usepackage{xcolor}
+
+\usepackage{accents,hyperref}
+% use theorems
+\newtheorem{thm}{Theorem}[section]
+\newtheorem{lemma}[thm]{Lemma}
+\newtheorem{assu}[thm]{Assumption}
+\newtheorem{prop}[thm]{Proposition}
+\newtheorem{cor}[thm]{Corollary}
+\newtheorem{conj}[thm]{Conjecture}
+\newtheorem{rmk}[thm]{Remark}
+
+\newcommand{\ubar}[1]{\underaccent{\bar}{#1}}
+\newcommand{\dhat}[1]{\hat{\hat{#1}}}
+\newcommand\numberthis{\addtocounter{equation}{1}\tag{\theequation}}
+\usepackage{parskip}
+
+
+\begin{document}
+
+\title{}
+\author{}
+\date{\today}
+\maketitle
+
+\abstract \noindent 
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.5\baselineskip}
+
+\section{Modified HHI Measure}
+
+We use a modified Herfindahl-type measure to capture the concentration of
+trading intensity within a quarter. Let $d_t$ denote signed demand during
+subperiod $t$ of a given quarter, and define cumulative signed demand in the
+quarter as
+\begin{equation}
+    D = \sum_t d_t .
+\end{equation}
+If all demand realizations have the same sign, one can define demand shares as
+\begin{equation}
+    w_t = \frac{|d_t|}{\sum_\tau |d_\tau|},
+\end{equation}
+and compute a generalized concentration measure
+\begin{equation}
+    H(\beta)
+    =
+    \left( \sum_t w_t^\beta \right)^{1/(\beta-1)},
+    \qquad \beta>1.
+    \label{eq:hhi}
+\end{equation}
+When $\beta=2$, this measure coincides with the standard Herfindahl-Hirschman
+Index: $H(2)=\sum_t w_t^2$. In the empirical analysis, we primarily use $\beta=2$, but we also consider alternative values of $\beta$ to examine robustness.
+
+In the data, signed demand need not have the same sign throughout the quarter.
+Because our goal is to measure the concentration of trading pressure in the
+quarter's main direction, we first identify the sign of net quarterly demand,
+$\operatorname{sign}(D)$. For quarters with $D\neq 0$, define same-direction
+demand as
+\begin{equation}
+    \tilde d_t
+    =
+    d_t \cdot
+    \mathbf{1}\left\{
+    \operatorname{sign}(d_t)=\operatorname{sign}(D)
+    \right\}.
+\end{equation}
+Let
+\begin{equation}
+    \tilde G
+    =
+    \sum_t |\tilde d_t|
+\end{equation}
+denote total same-direction gross demand. We then define same-direction demand
+shares as
+\begin{equation}
+    \tilde w_t
+    =
+    \frac{|\tilde d_t|}{\tilde G},
+\end{equation}
+and compute the modified concentration measure as
+\begin{equation}
+    \tilde H(\beta)
+    =
+    \left( \sum_t \tilde w_t^\beta \right)^{1/(\beta-1)}.
+    \label{eq:modified_hhi}
+\end{equation}
+Thus, $\tilde H(\beta)$ captures how concentrated demand is among the subperiods that contribute to the quarter's net direction. 
+
+
+\end{document}

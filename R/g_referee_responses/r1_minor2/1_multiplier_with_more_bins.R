@@ -219,21 +219,7 @@ raw_results <- mclapply(split(data_all, by = "type"), function(x) {
     p.process_one_type(x, reg_spec = "stdev")
 }, mc.cores = nc)
 
-# 2. Extract and stack all the data.tables (estimates)
-# This works because we are specifically grabbing the 'out_all' element from each list
 out_stdev <- rbindlist(lapply(raw_results, `[[`, "out_all"))
-
-# dcast(out_stdev[type == "OFI" & var %in% paste0("ofi_bin", 1:4)], var ~ spec_idx, value.var = "coef")
-# dcast(out_stdev[type == "FIT" & var %in% paste0("ofi_bin", 1:4)], var ~ spec_idx, value.var = "coef")
-# dcast(out_stdev[type == "BMI" & var %in% paste0("ofi_bin", 1:4)], var ~ spec_idx, value.var = "coef")
-
-# # still decline, but marginal?
-# out_stdev[spec_idx == 3 & grepl("ofi_bin4", var), .(type, var, coef, se, tstat = coef / se)]
-
-# 3. Extract all covariance lists and name them by 'type'
-# This creates a nested list: cov_stdev$BMI$spec_1, cov_stdev$OtherType$spec_1
-cov_stdev <- lapply(raw_results, `[[`, "cov_all")
-
 toc()
 
 # write to file
@@ -246,15 +232,16 @@ saveRDS(cov_stdev, paste0(to_dir, "fm_stdev_cov.RDS"))
 data <- data_all[, .(d = mean(abs(ofi))), by = .(type, bin)][order(type, bin)]
 saveRDS(data, paste0(to_dir, "abs_ofi_magnitude.RDS"))
 
-# --- sanity check: lower order coefs fully agree? yep, mostly
 
-old <- readRDS("../../tmp/price_impact/regression_contemp/fm_stdev.RDS")[type != "OFI_pre_whitened"]
-old <- old[spec_idx %in% 1:3 & var %in% paste0("ofi_bin", 1:3)]
-old <- old[, .(spec_idx, var, type, coef, se)]
+# # --- sanity check: lower order coefs fully agree? yep, mostly
 
-new <- readRDS("../../tmp/referee/r1_minor2/regression_4bins/fm_stdev.RDS")
-new <- new[spec_idx %in% 1:3 & var %in% paste0("ofi_bin", 1:3)]
-new <- new[, .(spec_idx, var, type, coef, se)]
+# old <- readRDS("../../tmp/price_impact/regression_contemp/fm_stdev.RDS")[type != "OFI_pre_whitened"]
+# old <- old[spec_idx %in% 1:3 & var %in% paste0("ofi_bin", 1:3)]
+# old <- old[, .(spec_idx, var, type, coef, se)]
 
-compare <- merge(old, new, by = c("spec_idx", "var", "type"))
-compare[, mean(abs(coef.x - coef.y)), var]
+# new <- readRDS("../../tmp/referee/r1_minor2/regression_4bins/fm_stdev.RDS")
+# new <- new[spec_idx %in% 1:3 & var %in% paste0("ofi_bin", 1:3)]
+# new <- new[, .(spec_idx, var, type, coef, se)]
+
+# compare <- merge(old, new, by = c("spec_idx", "var", "type"))
+# compare[, mean(abs(coef.x - coef.y)), var]
