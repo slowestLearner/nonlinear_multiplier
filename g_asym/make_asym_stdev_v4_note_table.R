@@ -37,41 +37,6 @@ row_line <- function(label, cells) {
   paste0("  ", label, " & ", paste(cells, collapse = " & "), " \\\\")
 }
 
-panel_lines <- function(panel_name, main_rows, diff_rows) {
-  lines <- c(
-    paste0("  \\hline \\multicolumn{10}{c}{", panel_name, "} \\\\"),
-    "  \\hline",
-    "  & \\multicolumn{3}{c}{BMI} & \\multicolumn{3}{c}{FIT} & \\multicolumn{3}{c}{OFI} \\\\",
-    "  \\cmidrule(l){2-4} \\cmidrule(l){5-7} \\cmidrule(l){8-10}",
-    "  & (1) & (2) & (3) & (4) & (5) & (6) & (7) & (8) & (9) \\\\"
-  )
-  for (rw in main_rows) {
-    lines <- c(
-      lines,
-      row_line(rw[1], get_result(rw[2], "coef")),
-      row_line("", get_result(rw[2], "se"))
-    )
-  }
-  lines <- c(
-    lines,
-    "  \\vspace{5pt}",
-    row_line("Predictor controls", c("N", "Y", "Y", "N", "Y", "Y", "N", "Y", "Y")),
-    row_line("Liquidity controls", c("N", "N", "Y", "N", "N", "Y", "N", "N", "Y")),
-    "  \\vspace{5pt}",
-    row_line("Obs", scalar_cells("obs", comma)),
-    row_line("$R^2$", r2_cells("r2")),
-    row_line("Marginal $R^2(d_{n,t})$", marginal_r2_cells),
-    "  \\hline"
-  )
-  for (rw in diff_rows) {
-    lines <- c(
-      lines,
-      row_line(rw[1], get_result(rw[2], "coef")),
-      row_line("", get_result(rw[2], "se"))
-    )
-  }
-  c(lines, "  \\vspace{5pt}")
-}
 
 pos_main_rows <- list(
   c("$M_{\\{0 < d_{n,t} < \\sigma^+\\}}$", "ofi_bin1_pos"),
@@ -116,11 +81,45 @@ marginal_r2_cells <- vapply(cols, function(ts) {
   sprintf("%.3f", r$r2 - r$r2_no_ofi)
 }, character(1))
 
+all_main_rows <- c(pos_main_rows, neg_main_rows)
+all_diff_rows <- c(pos_diff_rows, neg_diff_rows)
+
+main_lines <- c()
+for (i in seq_along(all_main_rows)) {
+  rw <- all_main_rows[[i]]
+  main_lines <- c(main_lines, row_line(rw[1], get_result(rw[2], "coef")))
+  se_label <- if (i == length(all_main_rows)) "\\vspace{5pt} " else ""
+  main_lines <- c(main_lines, row_line(se_label, get_result(rw[2], "se")))
+}
+
+diff_lines <- c()
+for (rw in all_diff_rows) {
+  diff_lines <- c(
+    diff_lines,
+    row_line(rw[1], get_result(rw[2], "coef")),
+    row_line("", get_result(rw[2], "se"))
+  )
+}
+
 lines <- c(
   "\\begin{tabular}{lccccccccc}",
-  panel_lines("Panel A: Positive shocks", pos_main_rows, pos_diff_rows),
-  panel_lines("Panel B: Negative shocks", neg_main_rows, neg_diff_rows),
-  "  \\hline",
+  "  \\hline \\multicolumn{10}{c}{Panel A: Regression coefficients} \\\\",
+  " \\hline",
+  "                                    & \\multicolumn{9}{c}{Dependent variable: stock return $r_{n,t}$} \\\\",
+  "",
+  "                                    \\cmidrule(l){2-10} & \\multicolumn{3}{c}{BMI} & \\multicolumn{3}{c}{FIT} & \\multicolumn{3}{c}{OFI} \\\\",
+  " \\cmidrule(l){2-4} \\cmidrule(l){5-7} \\cmidrule(l){8-10} ",
+  "  & (1) & (2) & (3) & (4) & (5) & (6) & (7) & (8) & (9) \\\\ ",
+  main_lines,
+  row_line("Predictor controls", c("N", "Y", "Y", "N", "Y", "Y", "N", "Y", "Y")),
+  row_line("\\vspace{5pt}Liquidity controls", c("N", "N", "Y", "N", "N", "Y", "N", "N", "Y")),
+  row_line("Obs", scalar_cells("obs", comma)),
+  row_line("$R^2$", r2_cells("r2")),
+  row_line("Marginal $R^2(d_{n,t})$", marginal_r2_cells),
+  "   \\hline \\multicolumn{10}{c}{Panel B: Coefficient differences} \\\\",
+  paste0(" \\hline", diff_lines[1]),
+  diff_lines[-1],
+  "   \\hline ",
   "\\end{tabular}"
 )
 

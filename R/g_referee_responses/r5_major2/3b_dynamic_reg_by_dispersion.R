@@ -136,24 +136,24 @@ dir.create(dirname(to_file), recursive = T, showWarnings = F)
 saveRDS(out_all, to_file)
 toc()
 
-# # --- SANITY CHECK: plot results
+# # # --- SANITY CHECK: plot results
 
-out <- readRDS("tmp/reg_by_dispersion/dynamic_coefs_by_3bins.RDS")[spec_idx == 3][, spec_idx := NULL]
+# out <- readRDS("tmp/reg_by_dispersion/dynamic_coefs_by_3bins.RDS")[spec_idx == 3][, spec_idx := NULL]
 
-# select vars
-tmp <- unique(out[grepl("ofi_bin", var)][, .(var)])
-tmp <- tmp[c(1:3, 4, 7, 5)][, var_lab := paste0(.I, "_", var)]
-out <- merge(out, tmp, by = "var")
-out_all <- copy(out)
+# # select vars
+# tmp <- unique(out[grepl("ofi_bin", var)][, .(var)])
+# tmp <- tmp[c(1:3, 4, 7, 5)][, var_lab := paste0(.I, "_", var)]
+# out <- merge(out, tmp, by = "var")
+# out_all <- copy(out)
 
-# only works with ofi_sd
-this_disp_type <- "ofi_sd"
-# this_disp_type <- "hhi_pow2"
-# this_lag <- 8
+# # only works with ofi_sd
+# this_disp_type <- "ofi_sd"
+# # this_disp_type <- "hhi_pow2"
+# # this_lag <- 8
 
-# out <- copy(out_all)[disp_type == this_disp_type & nw_lag == this_lag]
-# out[, coef_round := round(coef, 2)]
-# out[, tstat_round := round(coef / se, 2)]
+# # out <- copy(out_all)[disp_type == this_disp_type & nw_lag == this_lag]
+# # out[, coef_round := round(coef, 2)]
+# # out[, tstat_round := round(coef / se, 2)]
 
-# dcast(out, var_lab ~ type + bin_disp, value.var = "coef_round")
-# dcast(out, var_lab ~ type + bin_disp, value.var = "tstat_round")
+# # dcast(out, var_lab ~ type + bin_disp, value.var = "coef_round")
+# # dcast(out, var_lab ~ type + bin_disp, value.var = "tstat_round")

@@ -24,69 +24,114 @@ p.fama_macbeth <- function(data, ff, compare_coefs = FALSE) {
       r2 = var(ols$fitted.values) / var(ols$model[[dep_var_name]])
     ))
   }
-  
+
   # regression by period
   out <- rbindlist(lapply(unique(data[, yyyymm]), p.get_one_period))
-  
+
   # extract R2
   r2_data <- unique(out[, .(yyyymm, r2)])[, .(r2 = mean(r2))]
   out[, r2 := NULL]
-  
+
   # let's do Newey-West
   yms <- sort(unique(out[, yyyymm]))
-  
+
   if (compare_coefs) {
     # 1. Identify all variables containing 'ofi_'
     all_vars <- unique(out$var)
     target_vars <- sort(grep("ofi_", all_vars, value = TRUE))
-    
+
     # 2. Generate all permutations (v_j, v_i)
     # expand.grid creates every possible combination of the two vectors
     pairs_grid <- expand.grid(var_j = target_vars, var_i = target_vars, stringsAsFactors = FALSE)
-    
+
     # 3. Filter out self-comparisons (where var_j == var_i)
     pairs_grid <- pairs_grid[pairs_grid$var_j != pairs_grid$var_i, ]
-    
+
     # 4. Use lapply to iterate through the rows of the grid
     diff_list <- lapply(1:nrow(pairs_grid), function(idx) {
       var_j <- pairs_grid$var_j[idx]
       var_i <- pairs_grid$var_i[idx]
-      
+
       # Extract coefficients for each variable
       dt_j <- out[var == var_j, .(yyyymm, coef_j = coef)]
       dt_i <- out[var == var_i, .(yyyymm, coef_i = coef)]
-      
+
       # Merge by yyyymm to ensure temporal alignment
       res <- merge(dt_j, dt_i, by = "yyyymm")
-      
+
       # Calculate the directional difference: v_j - v_i
       res[, coef := coef_j - coef_i]
       res[, var := paste0(var_j, " - ", var_i)]
-      
+
       return(res[, .(yyyymm, var, coef)])
     })
-    
+
     # Optional: combine into a single data.table
     out_diffs <- rbindlist(diff_list)
     out <- rbind(out, out_diffs)
   }
-  
+
   # newey-west lag
   if ("hor" %in% names(data)) {
     this_hor <- data[1, hor]
   } else {
     this_hor <- 1
   }
-  
+
+  # summarize
   coef_data <- data.table()
   for (this_var in unique(out[, var])) {
-    mm <- lm(coef ~ 1, out[var == this_var])
-    coef_data <- rbind(coef_data, data.table(
-      var = this_var, coef = mm$coef[1],
-      se = sqrt(vcov(mm)[1, 1]),
-      se_nw = sqrt(NeweyWest(mm, this_hor)[1, 1])
-    ))
+    # 1. Subset for non-NA observations only
+    sub_out <- out[var == this_var & !is.na(coef)]
+
+    # 2. Check if we have any data to analyze
+    if (nrow(sub_out) > 0) {
+      # Intercept-only regression to get the Fama-MacBeth average
+      mm <- lm(coef ~ 1, data = sub_out)
+
+      # 3. Handle Standard Errors safely
+      # Standard OLS SE
+      se_val <- sqrt(vcov(mm)[1, 1])
+
+      # Newey-West SE (wrapped in tryCatch to handle T too small for lag)
+      se_nw_val <- tryCatch(
+        {
+          sqrt(NeweyWest(mm, lag = this_hor, prewhite = FALSE)[1, 1])
+        },
+        error = function(e) {
+          return(NA_real_) # Return NA if NW calculation fails
+        }
+      )
+
+      # Build the successful row
+      res_row <- data.table(
+        var = this_var,
+        coef = as.numeric(mm$coef[1]),
+        se = se_val,
+        se_nw = se_nw_val
+      )
+    } else {
+      # 4. If all data for this variable was NA, return a row of NAs
+      res_row <- data.table(
+        var = this_var,
+        coef = NA_real_,
+        se = NA_real_,
+        se_nw = NA_real_
+      )
+    }
+
+    coef_data <- rbind(coef_data, res_row)
   }
+
+  # coef_data <- data.table()
+  # for (this_var in unique(out[, var])) {
+  #   mm <- lm(coef ~ 1, out[var == this_var])
+  #   coef_data <- rbind(coef_data, data.table(
+  #     var = this_var, coef = mm$coef[1],
+  #     se = sqrt(vcov(mm)[1, 1]),
+  #     se_nw = sqrt(NeweyWest(mm, this_hor)[1, 1])
+  #   ))
+  # }
   coef_data[, r2 := r2_data[, r2]]
   coef_data[, obs := nrow(data)]
   coef_data[, type := data[1, type]]
@@ -96,40 +141,40 @@ p.fama_macbeth <- function(data, ff, compare_coefs = FALSE) {
 
 # utility function: panel regression
 p.panel_regression <- function(data, ff, compare_coefs = FALSE) {
-    ols <- feols(as.formula(paste0(ff, " | yyyymm")), data, cluster = c("yyyymm", "permno"))
-    out <- data.table(
-        var = names(coef(ols)),
-        coef = coef(ols),
-        se = sqrt(diag(vcov(ols))),
-        obs = ols$nobs, r2 = r2(ols)["ar2"]
-    )
+  ols <- feols(as.formula(paste0(ff, " | yyyymm")), data, cluster = c("yyyymm", "permno"))
+  out <- data.table(
+    var = names(coef(ols)),
+    coef = coef(ols),
+    se = sqrt(diag(vcov(ols))),
+    obs = ols$nobs, r2 = r2(ols)["ar2"]
+  )
 
-    # also report coef differences
-    if (compare_coefs == TRUE) {
-        var_indices <- names(coef(ols)) %in% paste0("ofi_bin", 1:3)
+  # also report coef differences
+  if (compare_coefs == TRUE) {
+    var_indices <- names(coef(ols)) %in% paste0("ofi_bin", 1:3)
 
-        cc <- matrix(coef(ols)[var_indices])
-        C <- vcov(ols)[var_indices, var_indices]
+    cc <- matrix(coef(ols)[var_indices])
+    C <- vcov(ols)[var_indices, var_indices]
 
-        b_12 <- matrix(c(-1, 1, 0))
-        b_23 <- matrix(c(0, -1, 1))
-        b_13 <- matrix(c(-1, 0, 1))
+    b_12 <- matrix(c(-1, 1, 0))
+    b_23 <- matrix(c(0, -1, 1))
+    b_13 <- matrix(c(-1, 0, 1))
 
-        out <- rbind(out, data.table(
-            var = c("ofi_bin2 - ofi_bin1", "ofi_bin3 - ofi_bin2", "ofi_bin3 - ofi_bin1"),
-            coef = c(
-                (t(b_12) %*% cc)[1],
-                (t(b_23) %*% cc)[1],
-                (t(b_13) %*% cc)[1]
-            ),
-            se = c(
-                sqrt((t(b_12) %*% C %*% b_12)[1]),
-                sqrt((t(b_23) %*% C %*% b_23)[1]),
-                sqrt((t(b_13) %*% C %*% b_13)[1])
-            ),
-            obs = ols$nobs, r2 = r2(ols)["ar2"]
-        ))
-    }
+    out <- rbind(out, data.table(
+      var = c("ofi_bin2 - ofi_bin1", "ofi_bin3 - ofi_bin2", "ofi_bin3 - ofi_bin1"),
+      coef = c(
+        (t(b_12) %*% cc)[1],
+        (t(b_23) %*% cc)[1],
+        (t(b_13) %*% cc)[1]
+      ),
+      se = c(
+        sqrt((t(b_12) %*% C %*% b_12)[1]),
+        sqrt((t(b_23) %*% C %*% b_23)[1]),
+        sqrt((t(b_13) %*% C %*% b_13)[1])
+      ),
+      obs = ols$nobs, r2 = r2(ols)["ar2"]
+    ))
+  }
 
-    return(out)
+  return(out)
 }

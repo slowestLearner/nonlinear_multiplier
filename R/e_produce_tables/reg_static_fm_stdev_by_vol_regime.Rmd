@@ -29,23 +29,12 @@ library(reshape2) # For cast()
 library(this.path)
 setwd(this.path::this.dir())
 
-# === panel A, regression results
-data <- readRDS("../g_referee_responses/r1_minor3/tmp/reg_results/reg_results_fm_pca_oos_jkp.RDS")[type != "OFI_pre_whitened"]
-data <- data[grepl("ofi_bin", var)]
+# --- prepare data
+data <- readRDS("../g_referee_responses/r5_minor1/tmp/reg_results/by_vol_regime.RDS")[spec_idx == 3]
 
-# choose some regression specifications
-tmp <- unique(data[, .(y_var, jkp_vars)])
-tmp <- tmp[c(1, 4, 5, 7, 10, 12, 14, 16, 18, 20)]
-tmp[, spec_idx := 1:nrow(tmp)]
-data <- merge(data, tmp, by = c("y_var", "jkp_vars"))
-rm(tmp)
-
-# for the first specification, use the results from the original regression which had a slightly larger sample
-tmp <- readRDS("../tmp/price_impact/regression_contemp/fm_stdev.RDS")[type != "OFI_pre_whitened" & spec_idx == 3 & grepl("ofi_bin", var)][, c("r2_no_ofi", "var_type", "var_added") := NULL]
-tmp[, spec_idx := 1]
-tmp[, y_var := "res_pc0"]
-tmp[, jkp_vars := 0]
-data <- rbind(data[spec_idx != 1], tmp)
+# choose variables
+tmp <- data.table(var = c(paste0("ofi_bin", 1:3), "ofi_bin2 - ofi_bin1", "ofi_bin3 - ofi_bin2", "ofi_bin3 - ofi_bin1"))[, var_idx := .I]
+data <- merge(data, tmp, by = "var")
 rm(tmp)
 
 # variable names
@@ -54,15 +43,22 @@ data[, var_lab := gsub("ofi_bin1", "M_\\{\\|d_{n,t}| < \\\\sigma\\}", var_lab)]
 data[, var_lab := gsub("ofi_bin2", "M_\\{\\|d_{n,t}| \\\\in \\[\\\\sigma, 2\\\\sigma\\]\\}", var_lab)]
 data[, var_lab := gsub("ofi_bin3", "M_\\{\\|d_{n,t}| > 2 \\\\sigma\\}", var_lab)]
 data[, var_lab := paste0("$", var_lab, "$")]
+
+# sort by sorting variables
+tmp <- unique(data[, .(vol_type, vol_bin)])
+tmp[, vol_type_idx := ifelse(vol_type == "vol_mkt", 1, ifelse(vol_type == "vol_stock_vw", 2, 3))]
+tmp <- tmp[order(vol_type_idx, vol_bin)]
+tmp[, reg_idx := 1:nrow(tmp)]
+data <- merge(data, tmp[, .(vol_type, vol_bin, reg_idx)], by = c("vol_type", "vol_bin"))
 data_all <- copy(data)
+rm(tmp)
 
-# I need to loop through types
-types <- unique(data[, type])
-for (this_type in types) {
-  # this_type <- 'BMI'
-  data <- copy(data_all[type == this_type])
+# loop through demand types
+for (this_type in unique(data[, type])) {
+  # this_type <- 'OFI'
+  data <- data_all[type == this_type]
 
-  # --- panel A regression results
+  # --- panel A, regression results
   tmp <- data[var %in% paste0("ofi_bin", 1:3)]
   tt <- unique(tmp[, list(var)])
   tt[, idx := 1:nrow(tt)]
@@ -84,10 +80,10 @@ for (this_type in types) {
   tmp[, coef_lab := paste0(coef_lab, ss_lab)]
   tmp[, ss_lab := NULL]
 
-  est <- dcast(tmp[, list(idx, spec_idx, coef_lab)], idx ~ spec_idx, value.var = "coef_lab") %>%
+  est <- dcast(tmp[, .(idx, reg_idx, coef_lab)], idx ~ reg_idx, value.var = "coef_lab") %>%
     dplyr::mutate(group_id = 100 * row_number(), type = "coef")
 
-  se <- dcast(tmp[, list(idx, spec_idx, se)], idx ~ spec_idx, value.var = "se") %>%
+  se <- dcast(tmp[, list(idx, reg_idx, se)], idx ~ reg_idx, value.var = "se") %>%
     dplyr::mutate(group_id = 100 * row_number() + 1, type = "se") %>%
     dplyr::mutate_at(vars(2:(ncol(est) - 2)), ~ paste0("$(", sprintf("%.2f", round(., 2)), ")$"))
 
@@ -100,26 +96,23 @@ for (this_type in types) {
     dplyr::rename(var_lab = idx)
   rm(est, se)
 
-
   # note controls
-  ctrls <- data.table(var_lab = "Predictor controls", t(rep("Y", length(unique(data[, spec_idx])))))
-  ctrls <- rbind(ctrls, data.table(var_lab = "Liquidity controls", t(rep("Y", length(unique(data[, spec_idx]))))))
-  ctrls <- rbind(ctrls, data.table(var_lab = "PCs controlled", t(c(0, 5, 10, 20, 50, 50, 50, 50, 50, 50))))
-  ctrls <- rbind(ctrls, data.table(var_lab = "JKP chars controlled", t(c(0, 0, 0, 0, 0, 76, 156, 236, 314, 394))))
 
+  ctrls <- data.table(var_lab = "Predictor controls", t(rep("Y", ncol(reg_tbl) - 3)))
+  ctrls <- rbind(ctrls, data.table(var_lab = "Liquidity controls", t(rep("Y", ncol(reg_tbl) - 3))))
   ctrls[, group_id := 300 + 1:nrow(ctrls)]
   ctrls[, type := ""]
   names(ctrls) <- names(reg_tbl)
   reg_tbl <- bind_rows(reg_tbl, ctrls)
   rm(ctrls)
 
-  obs_and_r2 <- unique(data[, list(spec_idx, obs, r2)]) %>%
+  obs_and_r2 <- unique(data[, list(reg_idx, obs, r2)]) %>%
     mutate(
       obs = comma(obs),
       r2 = paste0("$", sprintf("%.3f", r2), "$")
     ) %>%
-    pivot_longer(., -spec_idx) %>%
-    pivot_wider(names_from = "spec_idx", values_from = "value") %>%
+    pivot_longer(., -reg_idx) %>%
+    pivot_wider(names_from = "reg_idx", values_from = "value") %>%
     dplyr::mutate(name = replace(name, name == "r2", "$R^2$")) %>%
     mutate(name = replace(name, name == "obs", "Obs")) %>%
     rename(var_lab = name) %>%
@@ -130,12 +123,10 @@ for (this_type in types) {
     mutate(var_lab = ifelse(type == "se", "", var_lab)) %>%
     mutate(type = NULL, group_id = NULL)
 
-
-  # ---- panel B, add coef comparisions
+  # = add coef comparisions
   tmp <- copy(data[!(var %in% paste0("ofi_bin", 1:3))])
   tt <- unique(tmp[, list(var_lab)])[order(var_lab)]
-  tt <- tt[c(5, 4, 3)]
-  tt[, idx := .I]
+  tt[, idx := c(3, 2, 1)]
   tmp <- merge(tmp, tt, by = "var_lab")
 
   # add stars
@@ -154,10 +145,10 @@ for (this_type in types) {
 
   var_labels <- unique(tmp[, list(idx, var_lab)]) # keep track of order
 
-  est <- dcast(tmp[, list(idx, spec_idx, coef_lab)], idx ~ spec_idx, value.var = "coef_lab") %>%
+  est <- dcast(tmp[, list(idx, reg_idx, coef_lab)], idx ~ reg_idx, value.var = "coef_lab") %>%
     dplyr::mutate(group_id = 100 * row_number(), type = "coef")
 
-  se <- dcast(tmp[, list(idx, spec_idx, se)], idx ~ spec_idx, value.var = "se") %>%
+  se <- dcast(tmp[, list(idx, reg_idx, se)], idx ~ reg_idx, value.var = "se") %>%
     dplyr::mutate(group_id = 100 * row_number() + 1, type = "se") %>%
     dplyr::mutate_at(vars(2:(ncol(est) - 2)), ~ paste0("$(", sprintf("%.2f", round(., 2)), ")$"))
 
@@ -181,40 +172,20 @@ for (this_type in types) {
   rm(col_names)
   tbl <- copy(tbl_panelA)
 
-  # BMI cannot control for too many chars
-  if (this_type == "BMI") {
-    tbl <- tbl[, 1:6, with = F]
-  }
-
   align_vector <- paste0("ll", paste0(rep("c", times = ncol(tbl) - 1), collapse = ""))
   x.side <- xtable(tbl, align = align_vector)
 
-
-  if (this_type == "BMI") {
-    this_add_to_row <- list(
-      pos = list(-1, nrow(tbl) - 11, nrow(tbl) - 9, nrow(tbl) - 7, nrow(tbl) - 6, nrow(tbl)),
-      command = c(
-        "\\hline \\multicolumn{6}{c}{Panel A: price impact regressions} \\\\\n \\hline
-                                    & \\multicolumn{5}{c}{Dependent variable: stock return $r_{n,t}$} \\\\\n
-                                    \\cmidrule(l){2-6}  \n",
-        rep("\\vspace{5pt}", 3),
-        "\\hline \\multicolumn{6}{c}{Panel B: Coefficient differences} \\\\\n \\hline",
-        "\\hline \n"
-      )
+  this_add_to_row <- list(
+    pos = list(-1, nrow(tbl) - 11, nrow(tbl) - 9, nrow(tbl) - 6, nrow(tbl)),
+    command = c(
+      "\\hline \\multicolumn{7}{c}{Panel A: price impact regressions} \\\\\n \\hline
+                                    & \\multicolumn{6}{c}{Dependent variable: stock return $r_{n,t}$} \\\\\n
+                                    \\cmidrule(l){2-7} Volatility measure: & \\multicolumn{2}{c}{Market vol} & \\multicolumn{2}{c}{Stock vol (VW)} & \\multicolumn{2}{c}{Stock vol (EW)} \\\\\n \\cmidrule(l){2-3} \\cmidrule(l){4-5} \\cmidrule(l){6-7} Volatility regime: & Low & High & Low & High & Low & High \\\\\n \\cmidrule(l){2-3} \\cmidrule(l){4-5} \\cmidrule(l){6-7} \n",
+      rep("\\vspace{5pt}", 2),
+      "\\hline \\multicolumn{7}{c}{Panel B: Coefficient differences} \\\\\n \\hline",
+      "\\hline \n"
     )
-  } else {
-    this_add_to_row <- list(
-      pos = list(-1, nrow(tbl) - 11, nrow(tbl) - 9, nrow(tbl) - 7, nrow(tbl) - 6, nrow(tbl)),
-      command = c(
-        "\\hline \\multicolumn{11}{c}{Panel A: price impact regressions} \\\\\n \\hline
-                                    & \\multicolumn{10}{c}{Dependent variable: stock return $r_{n,t}$} \\\\\n
-                                    \\cmidrule(l){2-11}  \n",
-        rep("\\vspace{5pt}", 3),
-        "\\hline \\multicolumn{11}{c}{Panel B: Coefficient differences} \\\\\n \\hline",
-        "\\hline \n"
-      )
-    )
-  }
+  )
 
   print(x.side,
     type = "latex",
@@ -242,7 +213,7 @@ for (this_type in types) {
     floating = FALSE, # whether \begin{Table} should be created (TRUE) or not (FALSE)
     sanitize.text.function = force, # Important to treat content of first column as latex function
     add.to.row = this_add_to_row,
-    file = paste0(to_dir, "reg_static_fm_stdev_more_controls_", this_type, ".tex")
+    file = paste0(to_dir, "reg_static_fm_stdev_by_vol_regime_", this_type, ".tex")
   )
 }
 ```

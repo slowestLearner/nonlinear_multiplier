@@ -1,0 +1,25 @@
+% latex table generated in R 4.4.1 by xtable 1.8-4 package
+% Wed May 20 12:22:31 2026
+\begin{tabular}{lcccccccc}
+  \toprule \multicolumn{9}{c}{Dependent variable: stock return $r_{n,t}$} \\
+  \midrule & \multicolumn{4}{c}{FIT} & \multicolumn{4}{c}{OFI} \\
+  \cmidrule(l){2-5} \cmidrule(l){6-9} \vspace{5pt}  
+  & (1) & (2) & (3) & (4) & (5) & (6) & (7) & (8) \\ 
+  $d_{n,t} \times I_{\text{sign}(d_{n,t}) = \text{sign}(\sum_{l=1}^L d_{n,t-l})}$ & $-2.20^{***}$ & $-1.78^{***}$ & $-1.46^{***}$ &  & $-0.88^{***}$ & $-0.90^{***}$ & $-0.95^{***}$ &  \\ 
+   & $(0.37)$ & $(0.35)$ & $(0.38)$ &  & $(0.10)$ & $(0.09)$ & $(0.09)$ &  \\ 
+  $d_{n,t} \times I_{\text{sign}(d_{n,t}) = \text{sign}(\sum_{l=1}^L d_{n,t-l})}\times \mathbf{I}_{1993-2002}$ &  &  &  & $-1.24^{*}$ &  &  &  & $-1.35^{***}$ \\ 
+   &  &  &  & $(0.71)$ &  &  &  & $(0.14)$ \\ 
+  $d_{n,t} \times I_{\text{sign}(d_{n,t}) = \text{sign}(\sum_{l=1}^L d_{n,t-l})}\times \mathbf{I}_{2003-2012}$ &  &  &  & $-2.42^{***}$ &  &  &  & $-0.82^{***}$ \\ 
+   &  &  &  & $(0.71)$ &  &  &  & $(0.13)$ \\ 
+  $d_{n,t} \times I_{\text{sign}(d_{n,t}) = \text{sign}(\sum_{l=1}^L d_{n,t-l})}\times \mathbf{I}_{2013-2022}$ &  &  &  & $-0.69$ &  &  &  & $-0.73^{***}$ \\ 
+   \vspace{5pt} &  &  &  & $(0.55)$ &  &  &  & $(0.17)$ \\ 
+  Predictor controls & Y & Y & Y & Y & Y & Y & Y & Y \\ 
+   \vspace{5pt}Liquidity controls & Y & Y & Y & Y & Y & Y & Y & Y \\ 
+  $d_{n,t} \times$ coarse bin($d_{n,t}$) & Y & Y & N & N & Y & Y & N & N \\ 
+   \vspace{5pt}$d_{n,t} \times$ coarse bin($\sum_{l=1}^L d_{n,t-l}$) & N & Y & N & N & N & Y & N & N \\ 
+  $d_{n,t} \times$ refined bin($d_{n,t}$) & N & N & Y & Y & N & N & Y & Y \\ 
+   \vspace{5pt}$d_{n,t} \times$ refined bin($\sum_{l=1}^L d_{n,t-l}$) & N & N & Y & Y & N & N & Y & Y \\ 
+  Obs & 461,175 & 461,175 & 461,175 & 461,175 & 423,696 & 423,696 & 423,696 & 423,696 \\ 
+  $R^2$ & $0.088$ & $0.090$ & $0.097$ & $0.097$ & $0.142$ & $0.146$ & $0.154$ & $0.154$ \\ 
+   \bottomrule 
+\end{tabular}

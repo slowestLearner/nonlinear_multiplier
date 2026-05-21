@@ -3,7 +3,7 @@
 > Mirrors PLAN.md structure. Updated after each step with key findings.
 > New agents: read PLAN.md for what to do, RESULTS.md for what was found.
 
-**Last updated:** 2026-05-07 (code review and fixes)
+**Last updated:** 2026-05-19 (table formatting revisions)
 **Status:** In Progress
 
 ---
@@ -540,3 +540,36 @@ Read `code/R/c_dynamic_results/2_regression_dynamic_fm.R`. The v4 dynamic script
 - Stata `.do` files (`stata_asymp_5_vars.do`, `stata_asymp_5_vars_rebin.do`, `stata_asymp_6_vars.do`, `stata_asymp_6_vars_rebin.do`) and their outputs (`fm_fit_ofi_posneg_summary_v3`, `fm_monthly_fit_ofi_posneg_v3`, `reg_table_dynamic.dta`) are present in `g_asym/` but not documented in this plan. They appear to be a Stata validation counterpart from the v3 analysis phase.
 - `2a_regression_fm.R` (in `b_static_results/`) has an unstaged modification adding `p.fama_macbeth_with_cov`; this is unrelated to the g_asym analysis and should be committed separately.
 - `3_regression_dynamic_and_static_fm_todel.R` has an unstaged deletion; also unrelated to g_asym.
+
+---
+
+## Table Formatting Revisions (2026-05-19)
+
+**Status:** DONE
+
+### Changes
+
+**Tables 3 and 6 — remove `n_months` column (`make_v4_delta_posneg_test_tables.R`):**
+- Commented out `r$n_months` from both `row_static` and `row_dynamic` paste0 calls.
+- Updated tabular column specs: static `{llrrrrrr}` → `{llrrrrr}`; dynamic `{llrrrrrrr}` → `{llrrrrrr}`.
+- Removed `& Months` from both table headers.
+- Regenerated `test_v4_delta_posneg_static_spec3.tex` and `test_v4_delta_posneg_dynamic_spec3.tex`.
+
+**New lag-4-only dynamic delta test table (`make_v4_delta_posneg_test_tables.R`):**
+- Added `row_dynamic_nolag` function: same as `row_dynamic` but omits the `r$hor` lag column.
+- Added output block that filters `dynamic` to `hor == 4` and writes `test_v4_delta_posneg_dynamic_spec3_lag4.tex`.
+- Table has 7 columns: Type, Contrast, Δ(+), Δ(-), Δ(+)−Δ(-), SE, t.
+
+**Tables 2 and 5 — unified single-regression layout:**
+
+Both `make_asym_stdev_v4_note_table.R` (Table 2) and `make_asym_stdev_v4_dynamic_note_table.R` (Table 5) were restructured from a two-panel positive/negative split into a single unified layout:
+- Removed `panel_lines` helper function from both scripts.
+- **Panel A** (renamed "Regression coefficients"): all 6 bin rows (3 positive, 3 negative) with SEs, then controls, Obs, R², Marginal R².
+- **Panel B** (renamed "Coefficient differences"): all 6 pairwise differences (3 positive, 3 negative) with SEs.
+- `\vspace{5pt}` is now embedded in row labels rather than emitted as standalone lines:
+  - On the SE row of the last main bin (bin3_neg SE): `\vspace{5pt} &`.
+  - On the Liquidity controls label: `\vspace{5pt}Liquidity controls`.
+- Panel headers use the xtable style: `\hline \multicolumn{N}{c}{Panel ...} \\ \hline`.
+- Added dependent-variable subheader row spanning all data columns.
+- Panel B `\hline` is concatenated directly with the first diff row (no blank line).
+- Regenerated both `.tex` files and recompiled `asym_stdev_v4_note.pdf` (8 pages, clean).
